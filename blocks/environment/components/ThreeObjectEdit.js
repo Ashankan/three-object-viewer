@@ -19,6 +19,7 @@ import {
 } from "@react-three/drei";
 import { VRMUtils, VRMLoaderPlugin } from "@pixiv/three-vrm";
 import { GLTFAudioEmitterExtension } from "three-omi";
+import { useSelect } from "@wordpress/data";
 import { Icon, moveTo, rotateLeft, resizeCornerNE } from "@wordpress/icons";
 // import { A11y } from "@react-three/a11y";
 import { Perf } from "r3f-perf";
@@ -34,9 +35,10 @@ const { registerStore } = wp.data;
 function TextObject(text) {
 	const textObj = useRef();
 	const [isSelected, setIsSelected] = useState();
-	const textBlockAttributes = wp.data
-		.select("core/block-editor")
-		.getBlockAttributes(text.htmlobjectId);
+	const textBlockAttributes = useSelect(
+		(select) => select("core/block-editor").getBlockAttributes(text.htmlobjectId),
+		[text.htmlobjectId]
+	);
 	const TransformController = ({ condition, wrap, children }) =>
 		condition ? wrap(children) : children;
 
@@ -150,9 +152,10 @@ function ThreeSky(sky) {
 function Spawn(spawn) {
 	const spawnObj = useRef();
 	const [isSelected, setIsSelected] = useState();
-	const spawnBlockAttributes = wp.data
-		.select("core/block-editor")
-		.getBlockAttributes(spawn.spawnpointID);
+	const spawnBlockAttributes = useSelect(
+		(select) => select("core/block-editor").getBlockAttributes(spawn.spawnpointID),
+		[spawn.spawnpointID]
+	);
 	const TransformController = ({ condition, wrap, children }) =>
 		condition ? wrap(children) : children;
 
@@ -176,7 +179,8 @@ function Spawn(spawn) {
 				<TransformController
 					condition={spawn.focusID === spawn.spawnpointID}
 					wrap={(children) => (
-						<TransformControls
+						<GizmoControls
+							gizmoHovered={spawn.gizmoHovered}
 							mode={spawn.transformMode}
 							enabled={spawn.focusID === spawn.spawnpointID}
 							object={spawnObj}
@@ -199,14 +203,14 @@ function Spawn(spawn) {
 										scaleX: scale.x,
 										scaleY: scale.y,
 										scaleZ: scale.z
-									});
-							}}
-						>
-							{children}
-						</TransformControls>
-					)}
-				>
-					{spawnBlockAttributes && (
+										});
+										}}
+										>
+										{children}
+										</GizmoControls>
+										)}
+										>
+										{spawnBlockAttributes && (
 						<mesh
 							ref={spawnObj}
 							visible
@@ -235,9 +239,10 @@ function ImageObject(threeImage) {
 	const texture2 = useLoader(THREE.TextureLoader, threeImage.url);
 	const imgObj = useRef();
 	const [isSelected, setIsSelected] = useState();
-	const threeImageBlockAttributes = wp.data
-		.select("core/block-editor")
-		.getBlockAttributes(threeImage.imageID);
+	const threeImageBlockAttributes = useSelect(
+		(select) => select("core/block-editor").getBlockAttributes(threeImage.imageID),
+		[threeImage.imageID]
+	);
 	const TransformController = ({ condition, wrap, children }) =>
 		condition ? wrap(children) : children;
 
@@ -336,18 +341,10 @@ function ImageObject(threeImage) {
 function AudioObject(threeAudio) {
 	const texture2 = useLoader(THREE.TextureLoader, (threeObjectPlugin + audioIcon));
 
-	const [threeAudioBlockAttributes, setThreeAudioBlockAttributes] = useState(
-		wp.data
-			.select("core/block-editor")
-			.getBlockAttributes(threeAudio.audioID)
+	const threeAudioBlockAttributes = useSelect(
+		(select) => select("core/block-editor").getBlockAttributes(threeAudio.audioID),
+		[threeAudio.audioID]
 	);
-	  
-	useEffect(() => {
-		const attributes = wp.data
-			.select("core/block-editor")
-			.getBlockAttributes(threeAudio.audioID);
-			setThreeAudioBlockAttributes(attributes);
-	}, [threeAudio.audioID]);
 
 	const [isSelected, setIsSelected] = useState();
  	  
@@ -517,18 +514,10 @@ function LightObject(threeLight) {
 
 	const texture2 = useLoader(THREE.TextureLoader, (threeObjectPlugin + lightIcon));
 
-	const [threeLightBlockAttributes, setThreeLightBlockAttributes] = useState(
-		wp.data
-			.select("core/block-editor")
-			.getBlockAttributes(threeLight.lightID)
+	const threeLightBlockAttributes = useSelect(
+		(select) => select("core/block-editor").getBlockAttributes(threeLight.lightID),
+		[threeLight.lightID]
 	);
-	  
-	useEffect(() => {
-		const attributes = wp.data
-			.select("core/block-editor")
-			.getBlockAttributes(threeLight.lightID);
-			setThreeLightBlockAttributes(attributes);
-	}, [threeLight.lightID]);
 
 	const [isSelected, setIsSelected] = useState();
  	  
@@ -628,23 +617,11 @@ function VideoObject(threeVideo) {
 	const [url, setUrl] = useState(threeVideo.modelUrl);
 	const [screen, setScreen] = useState(null);
 	const [screenParent, setScreenParent] = useState(null);
-	const [threeVideoBlockAttributes, setThreeVideoBlockAttributes] = useState(
-		wp.data
-			.select("core/block-editor")
-			.getBlockAttributes(threeVideo.videoID)
+	const threeVideoBlockAttributes = useSelect(
+		(select) => select("core/block-editor").getBlockAttributes(threeVideo.videoID),
+		[threeVideo.videoID]
 	);
-	const [customModel, setCustomModel] = useState(null);
-	useEffect(() => {
-		setCustomModel(threeVideoBlockAttributes.customModel);
-	  }, [threeVideoBlockAttributes.customModel]);
-	  
-	useEffect(() => {
-		const attributes = wp.data
-			.select("core/block-editor")
-			.getBlockAttributes(threeVideo.videoID);
-		setThreeVideoBlockAttributes(attributes);
-		setCustomModel(attributes.customModel);
-	}, [threeVideo.videoID]);
+	const customModel = threeVideoBlockAttributes?.customModel ?? null;
 
 	useEffect(() => {
 	  setTimeout(() => setUrl(threeVideo.modelUrl), 2000);
@@ -752,13 +729,8 @@ function VideoObject(threeVideo) {
 									scaleX: scale.x,
 									scaleY: scale.y,
 									scaleZ: scale.z
-								});
-							setThreeVideoBlockAttributes(
-								wp.data
-									.select("core/block-editor")
-									.getBlockAttributes(threeVideo.videoID)
-							);
-						}}
+									});
+									}}
 					>
 						{children}
 					</TransformControls>
@@ -851,8 +823,9 @@ function ModelObject(props) {
 	const TransformController = ({ condition, wrap, children }) =>
 	condition ? wrap(children) : children;
 	const [isSelected, setIsSelected] = useState();
-	const [modelBlockAttributes, setModelBlockAttributes] = useState(
-		wp.data.select("core/block-editor").getBlockAttributes(props.modelID)
+	const modelBlockAttributes = useSelect(
+		(select) => select("core/block-editor").getBlockAttributes(props.modelID),
+		[props.modelID]
 	);
 	const obj = useRef();
 
@@ -1047,8 +1020,9 @@ function NPCObject(props) {
 	const TransformController = ({ condition, wrap, children }) =>
 	condition ? wrap(children) : children;
 	const [isSelected, setIsSelected] = useState();
-	const [modelBlockAttributes, setModelBlockAttributes] = useState(
-		wp.data.select("core/block-editor").getBlockAttributes(props.modelID)
+	const modelBlockAttributes = useSelect(
+		(select) => select("core/block-editor").getBlockAttributes(props.modelID),
+		[props.modelID]
 	);
 	const obj = useRef();
 
@@ -1225,8 +1199,9 @@ function NPCObject(props) {
 
 function PortalObject(model) {
 	const [isSelected, setIsSelected] = useState();
-	const [portalBlockAttributes, setPortalBlockAttributes] = useState(
-		wp.data.select("core/block-editor").getBlockAttributes(model.portalID)
+	const portalBlockAttributes = useSelect(
+		(select) => select("core/block-editor").getBlockAttributes(model.portalID),
+		[model.portalID]
 	);
 
 	useEffect(() => {
@@ -1389,6 +1364,59 @@ function PortalObject(model) {
 			</Select>
 		</>
 	);
+}
+
+// Wraps TransformControls and sets gizmoHovered ref on hover
+function GizmoControls({ gizmoHovered, children, ...tcProps }) {
+	const ref = useRef();
+	useEffect(() => {
+		const tc = ref.current;
+		if (!tc) return;
+		const onHover = (e) => { if (gizmoHovered) gizmoHovered.current = e.value; };
+		tc.addEventListener('hovering-changed', onHover);
+		return () => tc.removeEventListener('hovering-changed', onHover);
+	}, [gizmoHovered]);
+	return <TransformControls ref={ref} {...tcProps}>{children}</TransformControls>;
+}
+
+function FlyNavigation() {
+	const { camera, controls } = useThree();
+	const keys = useRef({});
+	const SPEED = 0.15;
+
+	useEffect(() => {
+		const onDown = (e) => {
+			if (document.activeElement && ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+			keys.current[e.code] = true;
+		};
+		const onUp = (e) => { keys.current[e.code] = false; };
+		window.addEventListener('keydown', onDown);
+		window.addEventListener('keyup', onUp);
+		return () => {
+			window.removeEventListener('keydown', onDown);
+			window.removeEventListener('keyup', onUp);
+		};
+	}, []);
+
+	useFrame(() => {
+		const k = keys.current;
+		if (!k['KeyW'] && !k['KeyS'] && !k['KeyA'] && !k['KeyD'] && !k['ShiftLeft'] && !k['ShiftRight'] && !k['ControlLeft'] && !k['ControlRight']) return;
+		const forward = new THREE.Vector3();
+		const right = new THREE.Vector3();
+		const delta = new THREE.Vector3();
+		camera.getWorldDirection(forward);
+		right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+		if (k['KeyW']) delta.addScaledVector(forward, SPEED);
+		if (k['KeyS']) delta.addScaledVector(forward, -SPEED);
+		if (k['KeyA']) delta.addScaledVector(right, -SPEED);
+		if (k['KeyD']) delta.addScaledVector(right, SPEED);
+		if (k['ShiftLeft'] || k['ShiftRight']) delta.y += SPEED;
+		if (k['ControlLeft'] || k['ControlRight']) delta.y -= SPEED;
+		camera.position.add(delta);
+		if (controls && controls.target) controls.target.add(delta);
+	});
+
+	return null;
 }
 
 function ThreeObject(props) {
@@ -1918,108 +1946,131 @@ export default function ThreeObjectEdit(props) {
 	const [transformMode, setTransformMode] = useState("translate");
 
 	const ObjectControls = (props) => {
-		const [label, setLabel] = useState("transform");
-	  
-		const handleClick = (newLabel) => {
-		  setLabel(newLabel);
-		};
-	  
 		return (
 		  <div style={{ position: "relative", zIndex: 100 }}>
-			<div
-			  style={{
-				display: "flex",
-				justifyContent: "flex-start",
-				position: "absolute",
-				top: "15px",
-				left: "250px",
-			  }}
-			>
-			  <div style={{ display: "flex", justifyContent: "space-between" }}>
-				<button
-					title="translate"
-					style={{
-						backgroundColor:
-							props.transformMode === "translate" ? "lightgray" : "white",
-							borderRadius: "10px",
-							paddingTop: "5px",
-							marginRight: "5px",
-						}}
-					active={true}
-					onClick={() => props.setTransformMode("translate")}>
-						<Icon size={20} icon={moveTo}/>
-				</button>
-				<button
-					title="rotate"
-					style={{
-						backgroundColor:
-							props.transformMode === "rotate" ? "lightgray" : "white",
-							borderRadius: "10px",
-							paddingTop: "5px",
-							marginRight: "5px",
-					}}
-					onClick={() => props.setTransformMode("rotate")}
-				>
-						<Icon size={20} icon={rotateLeft}/>
-				</button>
-				<button
-					title="scale"
-					style={{
-						backgroundColor:
-							props.transformMode === "scale" ? "lightgray" : "white",
-							borderRadius: "10px",
-							paddingTop: "5px",
-							marginRight: "5px",
-						}}
-					onClick={() => props.setTransformMode("scale")}>
-						<Icon size={20} icon={resizeCornerNE}/>
-				</button>
-			  </div>
-			</div>
+		  <div
+		   style={{
+		  display: "flex",
+		  justifyContent: "flex-start",
+		  position: "absolute",
+		  top: "15px",
+		  left: "250px",
+		   }}
+		  >
+		   <div style={{ display: "flex", justifyContent: "space-between" }}>
+		  <button
+		   title="translate"
+		   style={{
+		    backgroundColor:
+		     props.transformMode === "translate" ? "lightgray" : "white",
+		     borderRadius: "10px",
+		     paddingTop: "5px",
+		     marginRight: "5px",
+		    }}
+		  active={true}
+		  onClick={() => props.setTransformMode("translate")}>
+		   <Icon size={20} icon={moveTo}/>
+		  </button>
+		  <button
+		   title="rotate"
+		   style={{
+		    backgroundColor:
+		     props.transformMode === "rotate" ? "lightgray" : "white",
+		     borderRadius: "10px",
+		     paddingTop: "5px",
+		     marginRight: "5px",
+		  }}
+		  onClick={() => props.setTransformMode("rotate")}
+		  >
+		   <Icon size={20} icon={rotateLeft}/>
+		  </button>
+		  <button
+		   title="scale"
+		   style={{
+		    backgroundColor:
+		     props.transformMode === "scale" ? "lightgray" : "white",
+		     borderRadius: "10px",
+		     paddingTop: "5px",
+		     marginRight: "5px",
+		    }}
+		  onClick={() => props.setTransformMode("scale")}>
+		   <Icon size={20} icon={resizeCornerNE}/>
+		  </button>
+		  </div>
+		  </div>
 		  </div>
 		);
 	  };
 
-	const [focusID, setFocusID] = useState([0, 0, 0]);
+	// Derive focusID directly from the block editor's selected block.
+	const focusID = useSelect(
+		(select) => select('core/block-editor').getSelectedBlockClientId()
+	);
+
 	const [shouldFocus, setShouldFocus] = useState(false);
 	useEffect(() => {
 		function onKeyUp(event) {
 			switch (event.code) {
-				case "KeyT":
-					setTransformMode("translate");
-					break;
-				case "KeyR":
-					setTransformMode("rotate");
-					break;
-				case "KeyS":
-					setTransformMode("scale");
-					break;
-				case "KeyF":
-					props.setFocus(props.focusPosition);
-					break;
+				case "Digit1": setTransformMode("translate"); break;
+				case "Digit2": setTransformMode("rotate"); break;
+				case "Digit3": setTransformMode("scale"); break;
+				case "KeyF": props.setFocus(props.focusPosition); break;
 				default:
 			}
 		};
 		window.addEventListener('keyup', onKeyUp);
-		return () => {
-		  window.removeEventListener('keyup', onKeyUp);
-		};		
+		return () => window.removeEventListener('keyup', onKeyUp);
 	}, [props.focusPosition]);
 
+	// Keep the store registration so spawn-point-block/Edit.js dispatch
+	// doesn't throw, but it no longer drives focusID.
 	useEffect(() => {
-		registerStore( 'three-object-environment-events', {
-			reducer: ( state = {}, action ) => {
-				return action;
-			},
-			actions: {
-				setFocusEvent( focus ) {
-					setFocusID(focus);
-					return { type: 'SET_FOCUS', focus };
+		try {
+			registerStore('three-object-environment-events', {
+				reducer: (state = {}, action) => action,
+				actions: {
+					setFocusEvent(focus) {
+						return { type: 'SET_FOCUS', focus };
+					}
 				}
-			}
-		});
+			});
+		} catch(e) { /* already registered */ }
 	}, []);
 	const canvasRef = useRef(null);
+
+	// Prevent Gutenberg's block drag from firing while the mouse is over the canvas.
+	// Gutenberg sets draggable="true" on the block wrapper div; we temporarily
+	// remove it on mouseenter and restore it on mouseleave.
+	useEffect(() => {
+		const container = canvasRef.current;
+		if (!container) return;
+		// canvasRef points to the R3F wrapper div; find the actual <canvas> inside it
+		const canvas = container.querySelector('canvas') || container;
+
+		let snapshotDraggables = [];
+
+		const disableDrag = () => {
+			const envBlock = canvas.closest('.wp-block-three-object-viewer-environment');
+			if (!envBlock) return;
+			// Snapshot all currently-draggable elements, then disable them
+			snapshotDraggables = Array.from(envBlock.querySelectorAll('[draggable="true"]'));
+			if (envBlock.getAttribute('draggable') === 'true') snapshotDraggables.push(envBlock);
+			snapshotDraggables.forEach(el => el.setAttribute('draggable', 'false'));
+		};
+		const enableDrag = () => {
+			// Restore from snapshot so we don't miss any elements
+			snapshotDraggables.forEach(el => el.setAttribute('draggable', 'true'));
+			snapshotDraggables = [];
+		};
+
+		canvas.addEventListener('mouseenter', disableDrag);
+		canvas.addEventListener('mouseleave', enableDrag);
+		return () => {
+			canvas.removeEventListener('mouseenter', disableDrag);
+			canvas.removeEventListener('mouseleave', enableDrag);
+		};
+	}, []);
+
 	const handleCanvasCreated = ({ gl, size, viewport }) => {
 		gl.setPixelRatio(viewport.dpr);
 		gl.setSize(size.width, size.height);
@@ -2031,6 +2082,7 @@ export default function ThreeObjectEdit(props) {
 			<ObjectControls transformMode={transformMode} setTransformMode={setTransformMode}/>
 				<Canvas
 					name={"maincanvas"}
+					onDragStart={(e) => e.preventDefault()}
 					camera={{
 						fov: 50,
 						near: 0.1,
@@ -2058,8 +2110,8 @@ export default function ThreeObjectEdit(props) {
 							zoom={1}
 						/>
 						{props.url && (
-							<Suspense fallback={null}>
-								{props.hdr && 
+						 <Suspense fallback={null}>
+						 {props.hdr && 
 									<Environment
 										blur={0.05}
 										files={props.hdr}
@@ -2081,10 +2133,12 @@ export default function ThreeObjectEdit(props) {
 										shouldFocus={shouldFocus}
 										changeFocusPoint={props.changeFocusPoint}
 										clientId={props.clientId}
+									gizmoHovered={props.gizmoHovered}
 									/>
 							</Suspense>
 						)}
-						<OrbitControls makeDefault enableZoom={props.selected} target={props.focusPoint}/>
+						<FlyNavigation />
+						 <OrbitControls makeDefault enableZoom={true} target={props.focusPoint}/>
 					</ContextBridge>
 				</Canvas>
 		</>

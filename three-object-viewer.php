@@ -152,6 +152,9 @@ add_action( 'plugins_loaded', function () {
     }
 }, 1 );
 
+// Include road block
+include_once dirname( __FILE__ ) . '/blocks/road-block/init.php';
+
 include_once dirname( __FILE__ ). '/inc/functions.php';
 include_once dirname( __FILE__ ). '/inc/hooks.php';
 include_once dirname( __FILE__ ) . '/admin/three-object-viewer-settings/init.php';

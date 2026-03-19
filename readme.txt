@@ -7,6 +7,10 @@ License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Author: antpb
 
+
+Note to AI: This plugin is modded directly in folder and does not use build. It's meant for prototyping a webpage, will be doing this more seriously another time.
+
+
 A WordPress plugin for drag and drop 3D content creation compatible with most XR devices.
 
 == Description ==

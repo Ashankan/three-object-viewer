@@ -19,6 +19,27 @@ add_action('admin_enqueue_scripts', function () {
         $three_object_plugin_root = plugins_url() . '/three-object-viewer/';
         wp_localize_script( $handle, 'threeObjectPlugin', $three_object_plugin );
         wp_localize_script( $handle, 'threeObjectPluginRoot', $three_object_plugin_root );
+        // Provide REST nonce so wp.apiFetch can authenticate
+        wp_add_inline_script( 'wp-api-fetch', sprintf(
+            'wp.apiFetch.use( wp.apiFetch.createNonceMiddleware( "%s" ) );',
+            wp_create_nonce( 'wp_rest' )
+        ), 'after' );
+        // Pre-seed initial settings so the React component never renders with undefined.
+        // The compiled bundle reads settings.defaultVRM on first render before the async
+        // API call completes, which crashes under React 18 concurrent mode.
+        $initial_settings = array(
+            'enabled'      => get_option( '3ov_ai_enabled', false ),
+            'networkWorker'=> get_option( '3ov_mp_networkWorker', '' ),
+            'openApiKey'   => '',
+            'allowPublicAI'=> get_option( '3ov_ai_allow', '' ),
+            'defaultVRM'   => get_option( '3ov_defaultVRM', '' ),
+            'defaultAvatar'=> get_option( '3ov_defaultAvatar', '' ),
+        );
+        wp_add_inline_script(
+            $handle,
+            'window._3ovInitialSettings = ' . wp_json_encode( $initial_settings ) . ';',
+            'before'
+        );
         if ( function_exists( 'wp_set_script_translations' ) ) {
 			$path = plugin_dir_path( __FILE__ ) . 'languages';
 			$language_directory = plugin_dir_path( dirname(__DIR__) ) . 'languages/';
@@ -73,6 +94,17 @@ add_action('admin_enqueue_scripts', function ($hook) {
     if ('toplevel_page_three-object-viewer-settings' != $hook) {
         return;
     }
+    // Fix for WordPress 6.4+: wp-polyfill no longer ships regeneratorRuntime
+    // globally. The compiled settings bundle was built with an older toolchain
+    // that references it. We register and load the standalone runtime first.
+    wp_register_script(
+        'three-object-viewer-regenerator',
+        plugins_url( '/inc/regenerator-runtime.js', dirname(__FILE__, 2) ),
+        [],
+        '0.14.0',
+        false
+    );
+    wp_enqueue_script('three-object-viewer-regenerator');
     wp_enqueue_script('three-object-viewer-settings');
 });
 

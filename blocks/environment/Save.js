@@ -5,7 +5,7 @@ export default function save({ attributes }) {
 	return (
 		<div {...useBlockProps.save()}>
 			<>
-				<div className="three-object-three-app-environment">
+				<div className="three-object-three-app-environment" style={{height:'100vh',overflow:'hidden'}}>
 					<p className="three-object-block-device-target">
 						{attributes.deviceTarget}
 					</p>

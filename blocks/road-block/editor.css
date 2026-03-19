@@ -1,0 +1,11 @@
+.wp-block-three-object-viewer-road-block {
+    min-height: 80px;
+    background: #0a0a0f;
+    border: 1px dashed #333;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 13px;
+}

@@ -11,7 +11,7 @@ class Plugin
 		add_filter( 'wp_check_filetype_and_ext',  array( $this, 'three_object_viewer_check_for_usdz'), 10, 4 );
 		add_action('wp_enqueue_scripts',  array( $this, 'threeobjectviewer_frontend_assets'));
 		add_action( 'rest_api_init',  array( $this, 'callAlchemy' ));
-		add_action('enqueue_block_assets',  array( $this, 'threeobjectviewer_editor_assets'));
+		add_action('enqueue_block_editor_assets',  array( $this, 'threeobjectviewer_editor_assets'));
  		//Register JavaScript and CSS for threeobjectloaderinit
 		add_action( 'wp_enqueue_scripts',  array( $this, 'threeobjectviewer_register_threeobjectloaderinit'), 5 );
 		//Enqueue JavaScript and CSS for threeobjectloaderinit
@@ -221,7 +221,9 @@ class Plugin
 					$openbrush_enabled = true;
 					$three_icosa_brushes_url = plugin_dir_url( "three-object-viewer-three-icosa/three-object-viewer-three-icosa.php" ) . 'brushes/';
 				} 
-				wp_register_script( 'versepress-frontend', plugin_dir_url( __FILE__ ) . $frontend_js, ['wp-element', 'wp-data', 'wp-hooks'], '', true );
+				wp_register_script( 'regenerator-runtime-versepress', plugins_url( '/inc/regenerator-runtime.js', dirname(__FILE__) ), [], '0.13.9', true );
+				wp_enqueue_script( 'regenerator-runtime-versepress' );
+				wp_register_script( 'versepress-frontend', plugin_dir_url( __FILE__ ) . $frontend_js, ['wp-element', 'wp-data', 'wp-hooks', 'regenerator-runtime-versepress'], '', true );
 				wp_localize_script( 'versepress-frontend', 'userData', $user_data_passed );
 				wp_localize_script( 'versepress-frontend', 'postSlug', $post_slug );
 				wp_localize_script( 'versepress-frontend', 'openbrushDirectory', $three_icosa_brushes_url );
@@ -402,7 +404,8 @@ class Plugin
 							'three-object-viewer/npc-block',
 							'three-object-viewer/three-image-block',
 							'three-object-viewer/three-video-block',
-							'three-object-viewer/spawn-point-block' 
+							'three-object-viewer/spawn-point-block',
+								'three-object-viewer/road-block'
 		];
 		// if in the directory above this one a folder named "pro" exists, add "three-mirror-block" to the array
 		// use the threeobjectviewer_is_pro function to check if pro

@@ -310,12 +310,12 @@ export default function ThreeObjectFront( props ) {
 					camera={ { fov: 40, zoom: props.zoom, position: [ 0, 0, 20 ] } }
 					shadowMap
 					style={ {
-						backgroundColor: props.backgroundColor,
-						margin: '0 Auto',
-						height: '500px',
-						width: '90%',
+					backgroundColor: props.backgroundColor,
+					margin: '0 Auto',
+					height: '500px',
+					width: '100%',
 					} }
-				>
+					>
 					<Hands />
 					<DefaultXRControllers />
 					<ambientLight intensity={ 0.4 } />
@@ -375,7 +375,7 @@ export default function ThreeObjectFront( props ) {
 						backgroundColor: props.backgroundColor,
 						margin: '0 Auto',
 						height: '500px',
-						width: '90%',
+						width: '100%',
 					} }
 				>
 					<ambientLight intensity={ 0.4 } />
@@ -418,13 +418,14 @@ export default function ThreeObjectFront( props ) {
 		return (
 			<>
 				<Canvas
-          camera={ { fov: 40, position: [0, 0, 20], zoom: props.zoom} }
-					shadowMap
-					style={ {
+				camera={ { fov: 40, position: [0, 0, 20], zoom: props.zoom} }
+				gl={ { alpha: true } }
+				shadowMap
+				style={ {
 						backgroundColor: props.backgroundColor,
 						margin: '0 Auto',
 						height: '500px',
-						width: '90%',
+						width: '100%',
 					} }
 				>
 					<ambientLight intensity={ 0.4 } />

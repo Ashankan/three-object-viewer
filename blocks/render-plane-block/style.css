@@ -1,0 +1,10 @@
+/* Object Display Block — Frontend Styles */
+.rpb-three-app p {
+    display: none !important;
+}
+.three-object-block-tip {
+    text-align: center;
+    font-size: 13px;
+    color: #888;
+    margin: 4px 0 0;
+}

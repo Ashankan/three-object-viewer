@@ -43,6 +43,7 @@ import { NPCObject } from "./core/front/NPCObject";
 import { Portal } from "./core/front/Portal";
 import { ThreeSky } from "./core/front/ThreeSky";
 import { TextObject } from "./core/front/TextObject";
+import { RoadMesh } from "../../road-block/RoadMesh";
 import { useKeyboardControls } from "./Controls";
 import { ContextBridgeComponent } from "./ContextBridgeComponent";
 
@@ -657,9 +658,23 @@ export default function EnvironmentFront(props) {
 	const [messageHistory, setMessageHistory] = useState();
 	const [loaded, setLoaded] = useState(false);
 	const [spawnPoints, setSpawnPoints] = useState([0,0,0]);
+	const [roadCfg, setRoadCfg] = useState(null);
+	const [roadPlayhead, setRoadPlayhead] = useState(0);
 	const [messageObject, setMessageObject] = useState({"tone": "happy", "message": "hello!"});
 	const [objectsInRoom, setObjectsInRoom] = useState([]);
 	const [url, setURL] = useState(props.threeUrl ? props.threeUrl : (threeObjectPlugin + defaultEnvironment));
+
+	useEffect(() => {
+		if (props.roadCfg) setRoadCfg(props.roadCfg);
+		const onReady = (e) => setRoadCfg(e.detail);
+		const onSeek  = (e) => setRoadPlayhead(e.detail.t);
+		document.addEventListener('road-block:ready', onReady);
+		document.addEventListener('road-block:seek',  onSeek);
+		return () => {
+			document.removeEventListener('road-block:ready', onReady);
+			document.removeEventListener('road-block:seek',  onSeek);
+		};
+	}, []);
 
 	if (loaded === true) {
 		const elements = document.body.getElementsByTagName('*');
@@ -707,6 +722,7 @@ export default function EnvironmentFront(props) {
 									/>
 								}
 								<ContextBridgeComponent/>
+								{roadCfg && <RoadMesh cfg={roadCfg} playhead={roadPlayhead} />}
 								<Physics
 									// debug
 								>

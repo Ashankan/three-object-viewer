@@ -1,0 +1,6 @@
+/* Object Display Block — Editor Styles */
+.wp-block-three-object-viewer-render-plane-block {
+    border: 2px dashed #555;
+    border-radius: 4px;
+    min-height: 120px;
+}
