@@ -5,7 +5,7 @@
     "attributes": {
         "bg_color": {
             "type": "string",
-            "default": "transparent"
+            "default": "#FFFFFF"
         },
         "zoom": {
             "type": "integer",

@@ -11,6 +11,20 @@ const threeApp = document.querySelectorAll(
 const modelsToAdd = document.querySelectorAll(
 	".three-object-three-app-model-block"
 );
+const roadDomEl = document.querySelector(
+	".three-object-three-app-road-block"
+);
+const roadToAdd = roadDomEl ? (function(el) {
+	const g = (cls) => { const e = el.querySelector('.' + cls); return e ? e.textContent.trim() : ''; };
+	return {
+		roadWidth:     parseFloat(g('road-block-width'))     || 2.5,
+		segments:      parseInt(g('road-block-segments'))    || 160,
+		unitsPerSec:   parseFloat(g('road-block-ups'))       || 8,
+		duration:      parseFloat(g('road-block-duration'))  || 60,
+		waveformUrl:   g('road-block-waveform-url'),
+		controlPoints: JSON.parse(el.querySelector('.road-block-control-points')?.dataset?.points || '[]'),
+	};
+})(roadDomEl) : null;
 const npcsToAdd = document.querySelectorAll(
 	".three-object-three-app-npc-block"
 );
@@ -146,6 +160,7 @@ threeApp.forEach((threeApp) => {
 						sky={sky ? sky : ""}
 						previewImage={threePreviewImage}
 						hdr ={hdr ? hdr : ""}
+						roadToAdd={roadToAdd ? roadToAdd : null}
 					/>
 \			</>,
 			threeApp

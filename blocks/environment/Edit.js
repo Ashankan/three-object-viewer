@@ -29,9 +29,67 @@ export default function Edit({ attributes, setAttributes, isSelected }) {
 	const [focusPosition, setFocusPosition] = useState(new THREE.Vector3());
 	const [focusPoint, setFocus] = useState(new THREE.Vector3());
 	const [mainModel, setMainModel] = useState(attributes.threeObjectUrl ? attributes.threeObjectUrl : (threeObjectPlugin + defaultEnvironment));
+	// Shared ref: true when mouse is hovering a TransformControls gizmo handle.
+	// Used to gate stopPropagation so Gutenberg only loses mouse events when
+	// the user is actually interacting with a gizmo.
+	const gizmoHovered = React.useRef(false);
 	const changeFocusPoint = (newValue) => {
 		setFocusPosition(newValue);
 	}
+
+
+
+	// MutationObserver: Gutenberg sets draggable="true" on whatever block is
+	// selected. Inside the 3D editor this causes the drag-and-drop ghost to
+	// fire instead of letting OrbitControls handle pointer events.
+	// Fix: watch the entire editor writing area and immediately strip
+	// draggable="true" from any block that gets it set.
+	useEffect(() => {
+		// The editor canvas area is outside our React tree, so we query the DOM directly.
+		const editorArea = document.querySelector('.editor-styles-wrapper');
+		if (!editorArea) return;
+
+		// Allow drag only inside the inner-blocks left panel and the right sidebar.
+		// Everything else (the 3D canvas area) should not be draggable.
+		const isInAllowedDragZone = (el) => {
+			if (el.closest('.interface-complementary-area')) return true;
+			// Our left panel InnerBlocks list — identified by data-is-drop-zone
+			// being a direct child of block-editor-inner-blocks inside our env block
+			const dropZone = el.closest('.block-editor-block-list__layout[data-is-drop-zone]');
+			if (dropZone) {
+				// Make sure this drop zone is inside our 220px left panel,
+				// not the wider editor canvas
+				const panel = dropZone.closest('[style*="max-width: 220px"]');
+				if (panel) return true;
+			}
+			return false;
+		};
+
+		const stripDraggable = (el) => {
+			if (el.getAttribute?.('draggable') === 'true' && !isInAllowedDragZone(el)) {
+				el.setAttribute('draggable', 'false');
+			}
+		};
+
+		// Strip anything already draggable on mount
+		editorArea.querySelectorAll('[draggable="true"]').forEach(stripDraggable);
+
+		const observer = new MutationObserver((mutations) => {
+			mutations.forEach((mutation) => {
+				if (mutation.type === 'attributes' && mutation.attributeName === 'draggable') {
+					stripDraggable(mutation.target);
+				}
+			});
+		});
+
+		observer.observe(editorArea, {
+			attributes: true,
+			attributeFilter: ['draggable'],
+			subtree: true,
+		});
+
+		return () => observer.disconnect();
+	}, []);
 
 	// useEffect to initialize the value of the threeObjectUrl attribute if it is not set
 	useEffect(() => {
@@ -279,17 +337,17 @@ export default function Edit({ attributes, setAttributes, isSelected }) {
 			</InspectorControls>
 				<>
 				<div
-				style={{
-					height: "90vh",
-					maxWidth: "220px",
-					width: "220px",
-					overflowY: "scroll",
-					position: "absolute",
-					top: "0px",
-					left: "0px",
-					zIndex: "1",
-					backgroundColor: "#2a2a2a"
-				}}
+					style={{
+						height: "90vh",
+						maxWidth: "220px",
+						width: "220px",
+						overflowY: "scroll",
+						position: "absolute",
+						top: "0px",
+						left: "0px",
+						zIndex: "1",
+						backgroundColor: "#2a2a2a"
+					}}
 				>
 					<InnerBlocks
 						renderAppender={ InnerBlocks.ButtonBlockAppender }
@@ -298,31 +356,40 @@ export default function Edit({ attributes, setAttributes, isSelected }) {
 					/>
 				</div>
 					{mainModel && (
-						<>
-							<EditorPluginProvider>
-								<ThreeObjectEdit
-									url={mainModel}
-									hdr={attributes.hdr}
-									deviceTarget={attributes.deviceTarget}
-									backgroundColor={attributes.bg_color}
-									zoom={attributes.zoom}
-									scale={attributes.scale}
-									hasZoom={attributes.hasZoom}
-									hasTip={attributes.hasTip}
-									positionX={attributes.positionX}
-									positionY={attributes.positionY}
-									animations={attributes.animations}
-									rotationY={attributes.rotationY}
-									setFocusPosition={setFocusPosition}
-									setFocus={setFocus}
-									changeFocusPoint={changeFocusPoint}
-									focusPosition={focusPosition}
-									focusPoint={focusPoint}
-									selected={isSelected}
-								/>
-							</EditorPluginProvider>
-						</>
-					)}
+					<>
+					<div
+					onMouseDown={(e) => { if (gizmoHovered.current) e.stopPropagation(); }}
+					onPointerDown={(e) => { if (gizmoHovered.current) e.stopPropagation(); }}
+					onDragStart={(e) => e.preventDefault()}
+					data-block-drag-ignore="true"
+					style={{ userSelect: 'none' }}
+					>
+					<EditorPluginProvider>
+					<ThreeObjectEdit
+					url={mainModel}
+					hdr={attributes.hdr}
+					deviceTarget={attributes.deviceTarget}
+					backgroundColor={attributes.bg_color}
+					zoom={attributes.zoom}
+					scale={attributes.scale}
+					hasZoom={attributes.hasZoom}
+					hasTip={attributes.hasTip}
+					positionX={attributes.positionX}
+					positionY={attributes.positionY}
+					animations={attributes.animations}
+					rotationY={attributes.rotationY}
+					setFocusPosition={setFocusPosition}
+					setFocus={setFocus}
+					changeFocusPoint={changeFocusPoint}
+					focusPosition={focusPosition}
+					focusPoint={focusPoint}
+					selected={isSelected}
+					 gizmoHovered={gizmoHovered}
+					 />
+					 </EditorPluginProvider>
+				</div>
+					</>
+				)}
 				</>
 		</div>
 	);

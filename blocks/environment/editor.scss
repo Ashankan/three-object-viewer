@@ -76,7 +76,8 @@
 .wp-block-three-object-viewer-three-portal-block,
 .wp-block-three-object-viewer-three-video-block,
 .wp-block-three-object-viewer-spawn-point-block,
-.wp-block-three-object-viewer-three-text-block  {
+.wp-block-three-object-viewer-three-text-block,
+.wp-block-three-object-viewer-road-block  {
 	display: flex;
 	float: left;
 	padding-left:10px !important;
@@ -194,6 +195,7 @@ div:has(> .three-object-viewer-component-container, > .three-object-viewer-inner
 .editor-styles-wrapper .wp-block-three-object-viewer-environment {
 	// display: flex !important;
 	background-color: rgb(42, 42, 42);
+	user-select: none;
 }
 
 .wp-block-three-object-viewer-environment.alignfull {

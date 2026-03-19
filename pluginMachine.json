@@ -21,7 +21,8 @@
             "three-light-block",
             "three-portal-block",
             "three-text-block",
-            "spawn-point-block"
+            "spawn-point-block",
+            "road-block"
         ],
         "proBlocks": [
             "three-mirror-block"

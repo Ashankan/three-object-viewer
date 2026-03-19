@@ -90,11 +90,9 @@
         }, 100);
     }
 
-    // Wait until the world is actually loaded before injecting the scrubber
     document.addEventListener('afs:ready', boot);
     document.addEventListener('three-object-viewer:world-loaded', boot);
 
-    // Fallback: watch for the canvas appearing inside the environment wrap
     function waitForCanvas() {
         var env = document.querySelector('.three-object-three-app-environment');
         if (!env) return;

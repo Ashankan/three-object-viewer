@@ -26,6 +26,49 @@ import { Perf } from "r3f-perf";
 // import EditControls from "./EditControls";
 import { Resizable } from "re-resizable";
 import defaultFont from "../../../inc/fonts/roboto.woff";
+import { RoadMesh } from "./core/front/RoadMesh";
+
+function RoadMeshEdit({ attributes, playhead }) {
+	if (!attributes || !attributes.controlPoints || attributes.controlPoints.length < 2) return null;
+	const cfg = {
+		roadWidth:     attributes.roadWidth     || 2.5,
+		segments:      attributes.segments      || 160,
+		unitsPerSec:   attributes.unitsPerSec   || 8,
+		duration:      attributes.duration      || 60,
+		waveformUrl:   attributes.waveformUrl   || '',
+		controlPoints: attributes.controlPoints || [],
+	};
+	return <RoadMesh cfg={cfg} playhead={playhead} />;
+}
+
+function RoadScrubber({ playhead, setPlayhead }) {
+	return (
+		<div style={{
+			position: 'absolute',
+			bottom: '0',
+			left: '0',
+			right: '0',
+			zIndex: 100,
+			background: 'linear-gradient(transparent, rgba(0,0,0,0.75))',
+			padding: '22px 16px 10px',
+			display: 'flex',
+			alignItems: 'center',
+			gap: '10px',
+			pointerEvents: 'auto',
+		}}>
+			<span style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', fontFamily: 'monospace', minWidth: '90px', whiteSpace: 'nowrap' }}>
+				{(playhead * 100).toFixed(1)}%
+			</span>
+			<input
+				type="range"
+				min="0" max="1" step="0.0001"
+				value={playhead}
+				style={{ flex: 1, cursor: 'pointer', accentColor: '#e8593c' }}
+				onChange={(e) => setPlayhead(parseFloat(e.target.value))}
+			/>
+		</div>
+	);
+}
 import audioIcon from "../../../inc/assets/audio_icon.png";
 import lightIcon from "../../../inc/assets/light_icon.png";
 import { EditorPluginProvider, useEditorPlugins, EditorPluginContext } from './EditorPluginProvider';  // Import the PluginProvider
@@ -1473,6 +1516,7 @@ function ThreeObject(props) {
 	const editorHtmlToAdd = [];
 	let htmlobject;
 	let htmlobjectId;
+	let roadObject = null;
 	const { select } = wp.data;
 
 	function getNestedBlocks(clientId) {
@@ -1571,6 +1615,9 @@ function ThreeObject(props) {
 							htmlobject = innerBlock.attributes;
 							htmlobjectId = innerBlock.clientId;
 							editorHtmlToAdd.push({ htmlobject, htmlobjectId });
+						}
+						if ( innerBlock.name === "three-object-viewer/road-block" ) {
+							roadObject = innerBlock.attributes;
 						}
 					});
 				}
@@ -1936,6 +1983,7 @@ function ThreeObject(props) {
 					/>
 				);
 			})}
+			{roadObject && <RoadMeshEdit attributes={roadObject} playhead={props.playhead} />}
 			<primitive object={gltf.scene} />
 		</>
 	);
@@ -1944,6 +1992,7 @@ function ThreeObject(props) {
 export default function ThreeObjectEdit(props) {
 
 	const [transformMode, setTransformMode] = useState("translate");
+	const [playhead, setPlayhead] = useState(0);
 
 	const ObjectControls = (props) => {
 		return (
@@ -2080,6 +2129,7 @@ export default function ThreeObjectEdit(props) {
 	return (
 		<>
 			<ObjectControls transformMode={transformMode} setTransformMode={setTransformMode}/>
+			<RoadScrubber playhead={playhead} setPlayhead={setPlayhead} />
 				<Canvas
 					name={"maincanvas"}
 					onDragStart={(e) => e.preventDefault()}
@@ -2133,7 +2183,8 @@ export default function ThreeObjectEdit(props) {
 										shouldFocus={shouldFocus}
 										changeFocusPoint={props.changeFocusPoint}
 										clientId={props.clientId}
-									gizmoHovered={props.gizmoHovered}
+										 playhead={playhead}
+								gizmoHovered={props.gizmoHovered}
 									/>
 							</Suspense>
 						)}

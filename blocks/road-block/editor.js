@@ -283,9 +283,27 @@
         );
     }
 
-    // ── Save Component — null because render_callback handles output ────────────
-    function Save() {
-        return null;
+    // ── Save Component ────────────────────────────────────────────────────────
+    function Save(props) {
+        var a = props.attributes;
+        var blockProps = useBlockProps.save();
+
+        return el('div', blockProps,
+            el('div', { className: 'road-block-data' },
+                el('p', { className: 'road-width' },      String(a.roadWidth)),
+                el('p', { className: 'road-segments' },   String(a.segments)),
+                el('p', { className: 'road-ups' },        String(a.unitsPerSec)),
+                el('p', { className: 'road-duration' },   String(a.duration)),
+                el('p', { className: 'road-cam-height' }, String(a.camHeight)),
+                el('p', { className: 'road-look-ahead' }, String(a.lookAhead)),
+                el('p', { className: 'road-fov' },        String(a.fov)),
+                el('p', { className: 'road-waveform-url' }, a.waveformUrl),
+                el('p', {
+                    className: 'road-control-points',
+                    'data-points': JSON.stringify(a.controlPoints || [])
+                }, '')
+            )
+        );
     }
 
     // ── Register ──────────────────────────────────────────────────────────────
