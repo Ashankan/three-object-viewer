@@ -8,9 +8,6 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Author: antpb
 
 
-Note to AI: This plugin is modded directly in folder and does not use build. It's meant for prototyping a webpage, will be doing this more seriously another time.
-
-
 A WordPress plugin for drag and drop 3D content creation compatible with most XR devices.
 
 == Description ==
@@ -43,6 +40,18 @@ It can also be installed manually using a zip file.
 3. Click the **Upload Plugin** button.
 4. Click the **Choose File** button, select the zip file you downloaded in step 1, then click the **Install Now** button.
 5. Click the **Activate Plugin** button.
+
+Fork (C:\Users\ashan\Documents\Wordpress\app\public\wp-content\plugins\three-object-viewer):
+This project is now forked into a custom project where we need to update the whole plugin to work with WordPress.
+Add new blocks for new functionality:
+1. 3D-render-plane: block with a named canvas to put a video-playlist in for a 2D page overlay viewer.
+2. Road-block: A plane for driving on the waveform of the current playing track in the media-bar (which is its own plugin: C:\Users\ashan\Documents\Wordpress\app\public\wp-content\plugins\merged\media-bar).
+3. plugin need to be joined with the AJAX-media-bar plugin: C:\Users\ashan\Documents\Wordpress\app\public\wp-content\plugins\merged
+
+== Fork Changelog ==
+Added: road-block
+Added: render-plane-block
+Fixed: Updated to work with current version of WordPress
 
 
 == Changelog ==
