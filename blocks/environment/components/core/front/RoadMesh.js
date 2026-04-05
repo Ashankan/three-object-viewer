@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from "react";
+import { useRef, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame, useLoader } from "@react-three/fiber";
 import { TextureLoader } from "three";
@@ -111,16 +111,25 @@ function RoadMeshWithTexture({ cfg, playheadRef, playhead }) {
 
 	const texture = useLoader(TextureLoader, cfg.waveformUrl);
 	texture.wrapS = THREE.RepeatWrapping;
-	texture.wrapT = THREE.ClampToEdgeWrapping;
+	texture.wrapT = THREE.RepeatWrapping;
 
 	useFrame(() => {
 		const t = Math.max(0, Math.min(1, playheadRef ? playheadRef.current : (playhead || 0)));
 		const N = spline.length - 1;
-		const p = spline[Math.min(Math.floor(t * N), N)];
+		const raw = t * N;
+		const i0 = Math.min(Math.floor(raw), N);
+		const i1 = Math.min(i0 + 1, N);
+		const frac = raw - i0;
+		const p0 = spline[i0];
+		const p1 = spline[i1];
+		const p = {
+			x: p0.x + (p1.x - p0.x) * frac,
+			y: p0.y + (p1.y - p0.y) * frac,
+			z: p0.z + (p1.z - p0.z) * frac,
+		};
 		if (roadRef.current)  roadRef.current.position.set(-p.x, -p.y, -p.z);
 		if (leftRef.current)  leftRef.current.position.set(-p.x, -p.y, -p.z);
 		if (rightRef.current) rightRef.current.position.set(-p.x, -p.y, -p.z);
-		texture.offset.y = t;
 	});
 
 	return (
@@ -139,6 +148,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, playhead }) {
 }
 
 function makeProceduralTex() {
+
 	const W = 1024, H = 64;
 	const cv = document.createElement('canvas');
 	cv.width = W; cv.height = H;
@@ -159,7 +169,7 @@ function makeProceduralTex() {
 	drawWave('rgba(232,89,60,0.35)', true);
 	const tex = new THREE.CanvasTexture(cv);
 	tex.wrapS = THREE.RepeatWrapping;
-	tex.wrapT = THREE.ClampToEdgeWrapping;
+	tex.wrapT = THREE.RepeatWrapping;
 	return tex;
 }
 
@@ -175,11 +185,20 @@ function RoadMeshProcedural({ cfg, playheadRef, playhead }) {
 	useFrame(() => {
 		const t = Math.max(0, Math.min(1, playheadRef ? playheadRef.current : (playhead || 0)));
 		const N = spline.length - 1;
-		const p = spline[Math.min(Math.floor(t * N), N)];
+		const raw = t * N;
+		const i0 = Math.min(Math.floor(raw), N);
+		const i1 = Math.min(i0 + 1, N);
+		const frac = raw - i0;
+		const p0 = spline[i0];
+		const p1 = spline[i1];
+		const p = {
+			x: p0.x + (p1.x - p0.x) * frac,
+			y: p0.y + (p1.y - p0.y) * frac,
+			z: p0.z + (p1.z - p0.z) * frac,
+		};
 		if (roadRef.current)  roadRef.current.position.set(-p.x, -p.y, -p.z);
 		if (leftRef.current)  leftRef.current.position.set(-p.x, -p.y, -p.z);
 		if (rightRef.current) rightRef.current.position.set(-p.x, -p.y, -p.z);
-		texture.offset.y = t;
 	});
 
 	return (
