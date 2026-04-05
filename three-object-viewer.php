@@ -155,6 +155,9 @@ add_action( 'plugins_loaded', function () {
 // Include road block
 include_once dirname( __FILE__ ) . '/blocks/road-block/init.php';
 
+// Include 3d-map block
+include_once dirname( __FILE__ ) . '/blocks/3d-map-block/init.php';
+
 include_once dirname( __FILE__ ). '/inc/functions.php';
 include_once dirname( __FILE__ ). '/inc/hooks.php';
 include_once dirname( __FILE__ ) . '/admin/three-object-viewer-settings/init.php';

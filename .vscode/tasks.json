@@ -6,7 +6,10 @@
       "type": "shell",
       "command": "npm run start",
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "NODE_OPTIONS": "--openssl-legacy-provider"
+        }
       },
       "isBackground": true,
       "problemMatcher": []
@@ -16,7 +19,10 @@
       "type": "shell",
       "command": "npm run build",
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "NODE_OPTIONS": "--openssl-legacy-provider"
+        }
       },
       "problemMatcher": []
     }

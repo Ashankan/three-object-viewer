@@ -1619,6 +1619,10 @@ function ThreeObject(props) {
 						if ( innerBlock.name === "three-object-viewer/road-block" ) {
 							roadObject = innerBlock.attributes;
 						}
+						if ( innerBlock.name === "three-object-viewer/tdm-block" ) {
+							if (!roadObject) roadObject = {};
+							roadObject = { ...roadObject, ...innerBlock.attributes };
+						}
 					});
 				}
 			}

@@ -25,7 +25,7 @@ import ThreeObjectEdit from "./components/ThreeObjectEdit";
 import { EditorPluginProvider, useEditorPlugins, EditorPluginContext } from './components/EditorPluginProvider';  // Import the PluginProvider
 
 export default function Edit({ attributes, setAttributes, isSelected }) {
-	const ALLOWED_BLOCKS = allowed_blocks;
+	const ALLOWED_BLOCKS = [...allowed_blocks, 'three-object-viewer/tdm-block'];
 	const [focusPosition, setFocusPosition] = useState(new THREE.Vector3());
 	const [focusPoint, setFocus] = useState(new THREE.Vector3());
 	const [mainModel, setMainModel] = useState(attributes.threeObjectUrl ? attributes.threeObjectUrl : (threeObjectPlugin + defaultEnvironment));

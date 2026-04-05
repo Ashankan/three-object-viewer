@@ -659,15 +659,66 @@ export default function EnvironmentFront(props) {
 	const [loaded, setLoaded] = useState(false);
 	const [spawnPoints, setSpawnPoints] = useState([0,0,0]);
 	const [roadPlayhead, setRoadPlayhead] = useState(0);
+	const roadPlayheadRef = useRef(0);
+	const [roadCfg, setRoadCfg] = useState(null);
 	const [messageObject, setMessageObject] = useState({"tone": "happy", "message": "hello!"});
 	const [objectsInRoom, setObjectsInRoom] = useState([]);
 	const [url, setURL] = useState(props.threeUrl ? props.threeUrl : (threeObjectPlugin + defaultEnvironment));
 
+	// Fetch 3D map data from the post linked to the current media-bar track.
+	function fetchRoadCfg() {
+		const player = window.MediaBarPlayer;
+		if (!player) return;
+		const item = player.getCurrentItem();
+		if (!item || !item.map_post_id) return;
+		fetch('/wp-json/wp/v2/posts/' + item.map_post_id + '?_fields=content')
+			.then(r => r.json())
+			.then(data => {
+				const html = data?.content?.rendered || '';
+				const tmp = document.createElement('div');
+				tmp.innerHTML = html;
+				const el = tmp.querySelector('.three-object-three-app-3d-map');
+				if (!el) return;
+				const g = (cls) => { const e = el.querySelector('.' + cls); return e ? e.textContent.trim() : ''; };
+				const roadBlockEl = document.querySelector('.three-object-three-app-road-block');
+				const geom = roadBlockEl ? {
+					roadWidth:   parseFloat(roadBlockEl.querySelector('.road-block-width')?.textContent)   || 2.5,
+					segments:    parseInt(roadBlockEl.querySelector('.road-block-segments')?.textContent)  || 160,
+					unitsPerSec: parseFloat(roadBlockEl.querySelector('.road-block-ups')?.textContent)     || 8,
+					duration:    parseFloat(roadBlockEl.querySelector('.road-block-duration')?.textContent)|| 60,
+				} : { roadWidth: 2.5, segments: 160, unitsPerSec: 8, duration: 60 };
+				setRoadCfg({
+					...geom,
+					waveformUrl:   g('tdm-waveform-url'),
+					controlPoints: JSON.parse(el.querySelector('.tdm-control-points')?.dataset?.points || '[]'),
+				});
+			})
+			.catch(() => {});
+	}
+
 	useEffect(() => {
-		const onSeek = (e) => setRoadPlayhead(e.detail.t);
-		document.addEventListener('road-block:seek', onSeek);
-		return () => document.removeEventListener('road-block:seek', onSeek);
-	}, []);
+		if (!props.roadToAdd) return;
+		if (!loaded) return;
+		fetchRoadCfg();
+		document.addEventListener('afs:ready', fetchRoadCfg);
+		return () => document.removeEventListener('afs:ready', fetchRoadCfg);
+	}, [loaded, props.roadToAdd]);
+
+	useEffect(() => {
+		if (!props.roadToAdd) return;
+		let raf;
+		function tick() {
+			const player = window.MediaBarPlayer;
+			if (player) {
+				const ct = player.getCurrentTime();
+				const dur = player.getDuration();
+				if (dur > 0) roadPlayheadRef.current = ct / dur;
+			}
+			raf = requestAnimationFrame(tick);
+		}
+		raf = requestAnimationFrame(tick);
+		return () => cancelAnimationFrame(raf);
+	}, [props.roadToAdd]);
 
 	if (loaded === true) {
 		const elements = document.body.getElementsByTagName('*');
@@ -715,7 +766,7 @@ export default function EnvironmentFront(props) {
 									/>
 								}
 								<ContextBridgeComponent/>
-								{props.roadToAdd && <RoadMesh cfg={props.roadToAdd} playhead={roadPlayhead} />}
+								{props.roadToAdd && roadCfg && <RoadMesh cfg={roadCfg} playheadRef={roadPlayheadRef} />}
 								<Physics
 									// debug
 								>

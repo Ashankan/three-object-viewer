@@ -405,7 +405,8 @@ class Plugin
 							'three-object-viewer/three-image-block',
 							'three-object-viewer/three-video-block',
 							'three-object-viewer/spawn-point-block',
-								'three-object-viewer/road-block'
+							'three-object-viewer/road-block',
+							'three-object-viewer/tdm-block'
 		];
 		// if in the directory above this one a folder named "pro" exists, add "three-mirror-block" to the array
 		// use the threeobjectviewer_is_pro function to check if pro

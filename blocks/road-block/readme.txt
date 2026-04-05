@@ -7,3 +7,6 @@ The road-block needs to load the texture and curvature for the road-block mesh f
 This means we need a gutenberg editor block for the road-mesh that can be used on the "3D map page" (curvature+texture). It would be nice with a 3D-mesh-map at in it, showing the road map.
 Point being: the point is that the road-block shouldn't get its infromation from the enviroment-block, it should always render whatever the media-bar tells it.
 The road-block and media-bar plugin is dependent on each other, needs to develop them in sync.
+
+So the road-block just needs MediaBarPlayer.getCurrentTime() and MediaBarPlayer.getDuration() to compute the playhead,
+and MediaBarPlayer.getCurrentItem().map_post_id to know which 3D map to load. Simple and clean.

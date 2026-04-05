@@ -1,7 +1,6 @@
 import React, { useRef, useMemo } from "react";
 import * as THREE from "three";
-import { useFrame } from "@react-three/fiber";
-import { useLoader } from "@react-three/fiber";
+import { useFrame, useLoader } from "@react-three/fiber";
 import { TextureLoader } from "three";
 
 function catmullRom(p0, p1, p2, p3, t) {
@@ -31,11 +30,16 @@ function sampleSpline(worldPts, N) {
 }
 
 function buildGeometry(cfg) {
-	const N = cfg.segments;
-	const halfWidth = cfg.roadWidth / 2;
-	const totalLen = cfg.duration * cfg.unitsPerSec;
+	const N = cfg.segments || 160;
+	const halfWidth = (cfg.roadWidth || 2.5) / 2;
+	const totalLen = (cfg.duration || 60) * (cfg.unitsPerSec || 8);
+	const controlPoints = cfg.controlPoints || [];
 
-	const sorted = [...cfg.controlPoints].sort((a, b) => a.t - b.t);
+	// If no control points, make a straight road
+	const sorted = controlPoints.length >= 2
+		? [...controlPoints].sort((a, b) => a.t - b.t)
+		: [{ t: 0, x: 0, y: 0 }, { t: 1, x: 0, y: 0 }];
+
 	const worldPts = sorted.map(p => new THREE.Vector3(p.x, p.y || 0, -p.t * totalLen));
 	const spline = sampleSpline(worldPts, N);
 
@@ -83,54 +87,46 @@ function buildGeometry(cfg) {
 	return { geo, spline };
 }
 
-export function RoadMesh({ cfg, playhead }) {
+function buildEdgeGeos(geo, N) {
+	const pos = geo.attributes.position;
+	const L = [], R = [];
+	for (let i = 0; i <= N; i++) {
+		L.push(new THREE.Vector3(pos.getX(i*2),   pos.getY(i*2)   + 0.02, pos.getZ(i*2)));
+		R.push(new THREE.Vector3(pos.getX(i*2+1), pos.getY(i*2+1) + 0.02, pos.getZ(i*2+1)));
+	}
+	return {
+		leftGeo:  new THREE.BufferGeometry().setFromPoints(L),
+		rightGeo: new THREE.BufferGeometry().setFromPoints(R),
+	};
+}
+
+// Renders road with a waveform texture — always calls useLoader unconditionally
+function RoadMeshWithTexture({ cfg, playheadRef, playhead }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
 
 	const { geo, spline } = useMemo(() => buildGeometry(cfg), [cfg]);
+	const edgeGeos = useMemo(() => buildEdgeGeos(geo, cfg.segments || 160), [geo]);
 
-	const edgeGeos = useMemo(() => {
-		const pos = geo.attributes.position;
-		const N = cfg.segments;
-		const L = [], R = [];
-		for (let i = 0; i <= N; i++) {
-			L.push(new THREE.Vector3(pos.getX(i*2),   pos.getY(i*2)   + 0.02, pos.getZ(i*2)));
-			R.push(new THREE.Vector3(pos.getX(i*2+1), pos.getY(i*2+1) + 0.02, pos.getZ(i*2+1)));
-		}
-		return {
-			leftGeo:  new THREE.BufferGeometry().setFromPoints(L),
-			rightGeo: new THREE.BufferGeometry().setFromPoints(R),
-		};
-	}, [geo, cfg.segments]);
-
-	const texture = cfg.waveformUrl
-		? useLoader(TextureLoader, cfg.waveformUrl)
-		: null;
-
-	if (texture) {
-		texture.wrapS = THREE.RepeatWrapping;
-		texture.wrapT = THREE.ClampToEdgeWrapping;
-	}
+	const texture = useLoader(TextureLoader, cfg.waveformUrl);
+	texture.wrapS = THREE.RepeatWrapping;
+	texture.wrapT = THREE.ClampToEdgeWrapping;
 
 	useFrame(() => {
+		const t = Math.max(0, Math.min(1, playheadRef ? playheadRef.current : (playhead || 0)));
 		const N = spline.length - 1;
-		const t = Math.max(0, Math.min(1, playhead));
-		const curIdx = Math.min(Math.floor(t * N), N);
-		const p = spline[curIdx];
-		const offsetZ = -p.z;
-
+		const p = spline[Math.min(Math.floor(t * N), N)];
 		if (roadRef.current)  roadRef.current.position.set(-p.x, -p.y, -p.z);
 		if (leftRef.current)  leftRef.current.position.set(-p.x, -p.y, -p.z);
 		if (rightRef.current) rightRef.current.position.set(-p.x, -p.y, -p.z);
-
-		if (texture) texture.offset.y = t;
+		texture.offset.y = t;
 	});
 
 	return (
 		<>
 			<mesh ref={roadRef} geometry={geo}>
-				<meshBasicMaterial map={texture} color={texture ? undefined : '#333333'} side={THREE.DoubleSide} />
+				<meshBasicMaterial map={texture} side={THREE.DoubleSide} />
 			</mesh>
 			<line ref={leftRef} geometry={edgeGeos.leftGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
@@ -140,4 +136,70 @@ export function RoadMesh({ cfg, playhead }) {
 			</line>
 		</>
 	);
+}
+
+function makeProceduralTex() {
+	const W = 1024, H = 64;
+	const cv = document.createElement('canvas');
+	cv.width = W; cv.height = H;
+	const ctx = cv.getContext('2d');
+	ctx.fillStyle = '#0d0d14';
+	ctx.fillRect(0, 0, W, H);
+	const drawWave = (col, mirror) => {
+		ctx.strokeStyle = col; ctx.lineWidth = 1.2; ctx.beginPath();
+		for (let x = 0; x < W; x++) {
+			const t = x / W;
+			const amp = Math.abs(Math.sin(t*61))*0.5 + Math.abs(Math.sin(t*127))*0.3 + Math.abs(Math.sin(t*23))*0.2;
+			const y = mirror ? H/2 + amp*H*0.42 : H/2 - amp*H*0.42;
+			x === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+		}
+		ctx.stroke();
+	};
+	drawWave('rgba(232,89,60,0.9)', false);
+	drawWave('rgba(232,89,60,0.35)', true);
+	const tex = new THREE.CanvasTexture(cv);
+	tex.wrapS = THREE.RepeatWrapping;
+	tex.wrapT = THREE.ClampToEdgeWrapping;
+	return tex;
+}
+
+function RoadMeshProcedural({ cfg, playheadRef, playhead }) {
+	const roadRef  = useRef();
+	const leftRef  = useRef();
+	const rightRef = useRef();
+	const texture  = useMemo(() => makeProceduralTex(), []);
+
+	const { geo, spline } = useMemo(() => buildGeometry(cfg), [cfg]);
+	const edgeGeos = useMemo(() => buildEdgeGeos(geo, cfg.segments || 160), [geo]);
+
+	useFrame(() => {
+		const t = Math.max(0, Math.min(1, playheadRef ? playheadRef.current : (playhead || 0)));
+		const N = spline.length - 1;
+		const p = spline[Math.min(Math.floor(t * N), N)];
+		if (roadRef.current)  roadRef.current.position.set(-p.x, -p.y, -p.z);
+		if (leftRef.current)  leftRef.current.position.set(-p.x, -p.y, -p.z);
+		if (rightRef.current) rightRef.current.position.set(-p.x, -p.y, -p.z);
+		texture.offset.y = t;
+	});
+
+	return (
+		<>
+			<mesh ref={roadRef} geometry={geo}>
+				<meshBasicMaterial map={texture} side={THREE.DoubleSide} />
+			</mesh>
+			<line ref={leftRef} geometry={edgeGeos.leftGeo}>
+				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
+			</line>
+			<line ref={rightRef} geometry={edgeGeos.rightGeo}>
+				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
+			</line>
+		</>
+	);
+}
+
+export function RoadMesh({ cfg, playhead, playheadRef }) {
+	if (cfg.waveformUrl) {
+		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} playhead={playhead} />;
+	}
+	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} playhead={playhead} />;
 }
