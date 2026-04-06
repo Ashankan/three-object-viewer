@@ -1,6 +1,8 @@
 == Next to do ==
 
 Should look at adding a 3rd container for chaching next-map.
+we need a way to measure time in world units so that we can attach the next-map to the right world cordinate on current track (at end but minus crossfade time) and let current track run next-track just like it runs previous-map.
+On next track play it should just resync to playhead, Important to let fix the logic so so all 3 containers shuffle correctly.
 
 == Done in previous edit ==
 _
