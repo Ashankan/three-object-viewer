@@ -934,6 +934,7 @@ export default function EnvironmentFront(props) {
 	const [roadPlayhead, setRoadPlayhead] = useState(0);
 	const roadPlayheadRef = useRef(0);
 	const frozenPlayheadRef = useRef(0);
+	const frozenOffsetRef = useRef(0);
 	const prevMapPostIdRef = useRef(null);
 	const roadClearTimerRef = useRef(null);
 	const [roadCfg, setRoadCfg] = useState(null);
@@ -1029,20 +1030,23 @@ export default function EnvironmentFront(props) {
 				const mapPostId = player.getCurrentItem()?.map_post_id ?? null;
 				if (mapPostId !== prevMapPostIdRef.current) {
 					// Song changed. roadPlayheadRef.current still holds the previous
-					// frame's value — snapshot it before it gets overwritten.
-					frozenPlayheadRef.current = roadPlayheadRef.current;
+					// frame's value — store it as the offset for the old road.
+					frozenOffsetRef.current = roadPlayheadRef.current;
 					prevMapPostIdRef.current = mapPostId;
-					// Freeze old road, start fresh for the new song.
+					// Move old road to frozen slot, start fresh for the new song.
 					setRoadCfg((current) => { setPrevRoadCfg(current); return null; });
 					roadPlayheadRef.current = 0;
 					if (mapPostId) fetchRoadCfg();
-					// Remove the frozen old road after 2s.
+					// Remove the old road after 2s.
 					if (roadClearTimerRef.current) clearTimeout(roadClearTimerRef.current);
 					roadClearTimerRef.current = setTimeout(() => setPrevRoadCfg(null), 2000);
 				}
 				const ct = player.getCurrentTime();
 				const dur = player.getDuration();
 				if (dur > 0) roadPlayheadRef.current = ct / dur;
+				// Old road moves in sync with the new playhead, offset so its frozen
+				// position aligns with world origin when the new song starts.
+				frozenPlayheadRef.current = frozenOffsetRef.current + roadPlayheadRef.current;
 			}
 			raf = requestAnimationFrame(tick);
 		}
