@@ -198,6 +198,7 @@ export default function Player(props) {
 	const canMoveRef = useRef(true);
 	const falling = useRef(true);
 	const animationsRef = useRef();
+	const mixerRef = useRef(null);
 	const orbitRef = useRef();
 	const rigidRef = useRef();
 	const castRef = useRef();
@@ -281,7 +282,10 @@ export default function Player(props) {
 		}, 1000);
 		// VRMUtils.rotateVRM0(playerController);
 		const currentVrm = playerController;
-		const currentMixer = new AnimationMixer(currentVrm.scene);
+		if (!mixerRef.current) {
+			mixerRef.current = new AnimationMixer(currentVrm.scene);
+		}
+		const currentMixer = mixerRef.current;
 
 	
 		// need to dynamically do this on scroll
@@ -614,21 +618,23 @@ export default function Player(props) {
 		});
 
 
-		let animationFiles = [idleFile, walkingFile, runningFile];
-		let animationsPromises = animationFiles.map(file => loadMixamoAnimation(file, currentVrm));
-	
-		Promise.all(animationsPromises)
-			.then(animations => {
-			const idleAction = currentMixer.clipAction(animations[0]);
-			const walkingAction = currentMixer.clipAction(animations[1]);
-			const runningAction = currentMixer.clipAction(animations[2]);
-			idleAction.timeScale = 1;
-			walkingAction.timeScale = 1;
-			runningAction.timeScale = 1;
-	
-			animationsRef.current = { idle: idleAction, walking: walkingAction, running: runningAction };
-			idleAction.play();
-		});
+		if (!animationsRef.current) {
+			let animationFiles = [idleFile, walkingFile, runningFile];
+			let animationsPromises = animationFiles.map(file => loadMixamoAnimation(file, currentVrm));
+
+			Promise.all(animationsPromises)
+				.then(animations => {
+				const idleAction = currentMixer.clipAction(animations[0]);
+				const walkingAction = currentMixer.clipAction(animations[1]);
+				const runningAction = currentMixer.clipAction(animations[2]);
+				idleAction.timeScale = 1;
+				walkingAction.timeScale = 1;
+				runningAction.timeScale = 1;
+
+				animationsRef.current = { idle: idleAction, walking: walkingAction, running: runningAction };
+				idleAction.play();
+			});
+		}
 		
 		return (
 			<>

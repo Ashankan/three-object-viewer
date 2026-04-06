@@ -1089,10 +1089,12 @@ export default function EnvironmentFront(props) {
 								)}
 								<ContextBridgeComponent />
 								{props.roadToAdd && roadCfg && (
-									<RoadMesh
-										cfg={roadCfg}
-										playheadRef={roadPlayheadRef}
-									/>
+									<Suspense fallback={null}>
+										<RoadMesh
+											cfg={roadCfg}
+											playheadRef={roadPlayheadRef}
+										/>
+									</Suspense>
 								)}
 								<Physics
 								// debug
