@@ -1,12 +1,13 @@
 == Next to do ==
 
-Sometimes now; previous-map shows at end of current-map, but not always. It is replaced when next track loads.
-Hard to reproduce, but I have witnessed it a couple of times.
-The scrub bar also stops working some times, and suddenly it works again...
-_
 Should look at adding a 3rd container for chaching next-map.
 
 == Done in previous edit ==
+_
+Sometimes now; previous-map shows at end of current-map, but not always. It is replaced when next track loads.
+Hard to reproduce, but I have witnessed it a couple of times.
+The scrub bar also stops working some times, and suddenly it works again:
+The fix is clean: RAF still runs every frame for smooth movement, but if el.duration is temporarily NaN during track loading, it falls back to lastValidDuration so the playhead keeps updating without a gap.
 _ 
 Change freeze duration 2s to remove to "something else" as condition.
 The remove condition will be changed in the future when more functionality is in place.

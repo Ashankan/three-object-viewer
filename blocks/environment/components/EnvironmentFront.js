@@ -1029,38 +1029,41 @@ export default function EnvironmentFront(props) {
 
 	useEffect(() => {
 		if (!props.roadToAdd) return;
+
+		function onSongChange(mapPostId) {
+			prevMapPostIdRef.current = mapPostId;
+			const wasActive = activeSlotRef.current;
+			const next = wasActive === 'A' ? 'B' : 'A';
+			frozenAnchorRef.current = { ...activePosRef.current };
+			originPosRef.current = null;
+			if (wasActive === 'A') slotAFrozenRef.current = true;
+			else slotBFrozenRef.current = true;
+			activeSlotRef.current = next;
+			const setWas = wasActive === 'A' ? setSlotA : setSlotB;
+			setWas(s => ({ ...s, frozen: true }));
+			const setNext = next === 'A' ? setSlotA : setSlotB;
+			setNext({ cfg: null, frozen: false });
+			roadPlayheadRef.current = 0;
+			if (mapPostId) fetchRoadCfg();
+		}
+
 		let raf;
+		let lastValidDuration = 0;
 		function tick() {
 			const player = window.MediaBarPlayer;
 			if (player) {
 				const mapPostId = player.getCurrentItem()?.map_post_id ?? null;
-				if (mapPostId !== prevMapPostIdRef.current) {
-					prevMapPostIdRef.current = mapPostId;
-					const wasActive = activeSlotRef.current;
-					const next = wasActive === 'A' ? 'B' : 'A';
-					// Snapshot position and reset origin before freeze — same frame.
-					frozenAnchorRef.current = { ...activePosRef.current };
-					originPosRef.current = null;
-					// Freeze synchronously via ref — takes effect this same frame.
-					if (wasActive === 'A') slotAFrozenRef.current = true;
-					else slotBFrozenRef.current = true;
-					// Switch active slot — next slot stays frozen until new cfg loads.
-					activeSlotRef.current = next;
-					// Update React state for cfg/pushed changes.
-					const setWas = wasActive === 'A' ? setSlotA : setSlotB;
-					setWas(s => ({ ...s, frozen: true }));
-					const setNext = next === 'A' ? setSlotA : setSlotB;
-					setNext({ cfg: null, frozen: false });
-					roadPlayheadRef.current = 0;
-					if (mapPostId) fetchRoadCfg();
-				}
+				if (mapPostId !== prevMapPostIdRef.current) onSongChange(mapPostId);
 				const ct = player.getCurrentTime();
 				const dur = player.getDuration();
-				if (dur > 0) roadPlayheadRef.current = ct / dur;
+				const effectiveDur = (isFinite(dur) && dur > 0) ? dur : lastValidDuration;
+				if (isFinite(dur) && dur > 0) lastValidDuration = dur;
+				if (effectiveDur > 0) roadPlayheadRef.current = ct / effectiveDur;
 			}
 			raf = requestAnimationFrame(tick);
 		}
 		raf = requestAnimationFrame(tick);
+
 		return () => cancelAnimationFrame(raf);
 	}, [props.roadToAdd]);
 
