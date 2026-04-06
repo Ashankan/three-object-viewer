@@ -101,7 +101,7 @@ function buildEdgeGeos(geo, N) {
 }
 
 // Renders road with a waveform texture — always calls useLoader unconditionally
-function RoadMeshWithTexture({ cfg, playheadRef, playhead }) {
+function RoadMeshWithTexture({ cfg, playheadRef, playhead, pushed }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -135,7 +135,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, playhead }) {
 	return (
 		<>
 			<mesh ref={roadRef} geometry={geo}>
-				<meshBasicMaterial map={texture} side={THREE.DoubleSide} />
+				<meshBasicMaterial map={texture} side={THREE.DoubleSide} polygonOffset={pushed} polygonOffsetFactor={pushed ? 1 : 0} polygonOffsetUnits={pushed ? 1 : 0} />
 			</mesh>
 			<line ref={leftRef} geometry={edgeGeos.leftGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
@@ -173,7 +173,7 @@ function makeProceduralTex() {
 	return tex;
 }
 
-function RoadMeshProcedural({ cfg, playheadRef, playhead }) {
+function RoadMeshProcedural({ cfg, playheadRef, playhead, pushed }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -204,7 +204,7 @@ function RoadMeshProcedural({ cfg, playheadRef, playhead }) {
 	return (
 		<>
 			<mesh ref={roadRef} geometry={geo}>
-				<meshBasicMaterial map={texture} side={THREE.DoubleSide} />
+				<meshBasicMaterial map={texture} side={THREE.DoubleSide} polygonOffset={pushed} polygonOffsetFactor={pushed ? 1 : 0} polygonOffsetUnits={pushed ? 1 : 0} />
 			</mesh>
 			<line ref={leftRef} geometry={edgeGeos.leftGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
@@ -216,9 +216,9 @@ function RoadMeshProcedural({ cfg, playheadRef, playhead }) {
 	);
 }
 
-export function RoadMesh({ cfg, playhead, playheadRef }) {
+export function RoadMesh({ cfg, playhead, playheadRef, pushed }) {
 	if (cfg.waveformUrl) {
-		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} playhead={playhead} />;
+		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} playhead={playhead} pushed={pushed} />;
 	}
-	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} playhead={playhead} />;
+	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} playhead={playhead} pushed={pushed} />;
 }

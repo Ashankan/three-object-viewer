@@ -933,8 +933,11 @@ export default function EnvironmentFront(props) {
 	const [spawnPoints, setSpawnPoints] = useState([0, 0, 0]);
 	const [roadPlayhead, setRoadPlayhead] = useState(0);
 	const roadPlayheadRef = useRef(0);
+	const frozenPlayheadRef = useRef(0);
 	const prevMapPostIdRef = useRef(null);
+	const roadClearTimerRef = useRef(null);
 	const [roadCfg, setRoadCfg] = useState(null);
+	const [prevRoadCfg, setPrevRoadCfg] = useState(null);
 	const [messageObject, setMessageObject] = useState({
 		tone: "happy",
 		message: "hello!"
@@ -1023,19 +1026,31 @@ export default function EnvironmentFront(props) {
 		function tick() {
 			const player = window.MediaBarPlayer;
 			if (player) {
+				const mapPostId = player.getCurrentItem()?.map_post_id ?? null;
+				if (mapPostId !== prevMapPostIdRef.current) {
+					// Song changed. roadPlayheadRef.current still holds the previous
+					// frame's value — snapshot it before it gets overwritten.
+					frozenPlayheadRef.current = roadPlayheadRef.current;
+					prevMapPostIdRef.current = mapPostId;
+					// Freeze old road, start fresh for the new song.
+					setRoadCfg((current) => { setPrevRoadCfg(current); return null; });
+					roadPlayheadRef.current = 0;
+					if (mapPostId) fetchRoadCfg();
+					// Remove the frozen old road after 2s.
+					if (roadClearTimerRef.current) clearTimeout(roadClearTimerRef.current);
+					roadClearTimerRef.current = setTimeout(() => setPrevRoadCfg(null), 2000);
+				}
 				const ct = player.getCurrentTime();
 				const dur = player.getDuration();
 				if (dur > 0) roadPlayheadRef.current = ct / dur;
-				const mapPostId = player.getCurrentItem()?.map_post_id ?? null;
-				if (mapPostId !== prevMapPostIdRef.current) {
-					prevMapPostIdRef.current = mapPostId;
-					if (mapPostId) fetchRoadCfg();
-				}
 			}
 			raf = requestAnimationFrame(tick);
 		}
 		raf = requestAnimationFrame(tick);
-		return () => cancelAnimationFrame(raf);
+		return () => {
+			cancelAnimationFrame(raf);
+			if (roadClearTimerRef.current) clearTimeout(roadClearTimerRef.current);
+		};
 	}, [props.roadToAdd]);
 
 	if (loaded === true) {
@@ -1088,6 +1103,15 @@ export default function EnvironmentFront(props) {
 									/>
 								)}
 								<ContextBridgeComponent />
+								{props.roadToAdd && prevRoadCfg && (
+									<Suspense fallback={null}>
+										<RoadMesh
+											cfg={prevRoadCfg}
+											playheadRef={frozenPlayheadRef}
+											pushed
+										/>
+									</Suspense>
+								)}
 								{props.roadToAdd && roadCfg && (
 									<Suspense fallback={null}>
 										<RoadMesh
