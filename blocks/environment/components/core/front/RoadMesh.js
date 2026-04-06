@@ -35,7 +35,6 @@ function buildGeometry(cfg) {
 	const totalLen = (cfg.duration || 60) * (cfg.unitsPerSec || 8);
 	const controlPoints = cfg.controlPoints || [];
 
-	// If no control points, make a straight road
 	const sorted = controlPoints.length >= 2
 		? [...controlPoints].sort((a, b) => a.t - b.t)
 		: [{ t: 0, x: 0, y: 0 }, { t: 1, x: 0, y: 0 }];
@@ -100,8 +99,7 @@ function buildEdgeGeos(geo, N) {
 	};
 }
 
-// Renders road with a waveform texture — always calls useLoader unconditionally
-function RoadMeshWithTexture({ cfg, playheadRef, playhead, pushed }) {
+function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, pushed }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -114,22 +112,31 @@ function RoadMeshWithTexture({ cfg, playheadRef, playhead, pushed }) {
 	texture.wrapT = THREE.RepeatWrapping;
 
 	useFrame(() => {
-		const t = Math.max(0, Math.min(1, playheadRef ? playheadRef.current : (playhead || 0)));
-		const N = spline.length - 1;
-		const raw = t * N;
-		const i0 = Math.min(Math.floor(raw), N);
-		const i1 = Math.min(i0 + 1, N);
-		const frac = raw - i0;
-		const p0 = spline[i0];
-		const p1 = spline[i1];
-		const p = {
-			x: p0.x + (p1.x - p0.x) * frac,
-			y: p0.y + (p1.y - p0.y) * frac,
-			z: p0.z + (p1.z - p0.z) * frac,
-		};
-		if (roadRef.current)  roadRef.current.position.set(-p.x, -p.y, -p.z);
-		if (leftRef.current)  leftRef.current.position.set(-p.x, -p.y, -p.z);
-		if (rightRef.current) rightRef.current.position.set(-p.x, -p.y, -p.z);
+		let x, y, z;
+		if (frozenRef.current) {
+			const anchor = frozenAnchorRef.current;
+			const origin = originPosRef.current;
+			const active = activePosRef.current;
+			if (!anchor || !origin) return;
+			x = anchor.x + (active.x - origin.x);
+			y = anchor.y + (active.y - origin.y);
+			z = anchor.z + (active.z - origin.z);
+		} else {
+			const t = Math.max(0, Math.min(1, playheadRef.current));
+			const N = spline.length - 1;
+			const i0 = Math.min(Math.floor(t * N), N);
+			const i1 = Math.min(i0 + 1, N);
+			const frac = t * N - i0;
+			const p0 = spline[i0], p1 = spline[i1];
+			x = -(p0.x + (p1.x - p0.x) * frac);
+			y = -(p0.y + (p1.y - p0.y) * frac);
+			z = -(p0.z + (p1.z - p0.z) * frac);
+			activePosRef.current = { x, y, z };
+			if (!originPosRef.current) originPosRef.current = { x, y, z };
+		}
+		if (roadRef.current)  roadRef.current.position.set(x, y, z);
+		if (leftRef.current)  leftRef.current.position.set(x, y, z);
+		if (rightRef.current) rightRef.current.position.set(x, y, z);
 	});
 
 	return (
@@ -148,7 +155,6 @@ function RoadMeshWithTexture({ cfg, playheadRef, playhead, pushed }) {
 }
 
 function makeProceduralTex() {
-
 	const W = 1024, H = 64;
 	const cv = document.createElement('canvas');
 	cv.width = W; cv.height = H;
@@ -173,7 +179,7 @@ function makeProceduralTex() {
 	return tex;
 }
 
-function RoadMeshProcedural({ cfg, playheadRef, playhead, pushed }) {
+function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, pushed }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -183,22 +189,31 @@ function RoadMeshProcedural({ cfg, playheadRef, playhead, pushed }) {
 	const edgeGeos = useMemo(() => buildEdgeGeos(geo, cfg.segments || 160), [geo]);
 
 	useFrame(() => {
-		const t = Math.max(0, Math.min(1, playheadRef ? playheadRef.current : (playhead || 0)));
-		const N = spline.length - 1;
-		const raw = t * N;
-		const i0 = Math.min(Math.floor(raw), N);
-		const i1 = Math.min(i0 + 1, N);
-		const frac = raw - i0;
-		const p0 = spline[i0];
-		const p1 = spline[i1];
-		const p = {
-			x: p0.x + (p1.x - p0.x) * frac,
-			y: p0.y + (p1.y - p0.y) * frac,
-			z: p0.z + (p1.z - p0.z) * frac,
-		};
-		if (roadRef.current)  roadRef.current.position.set(-p.x, -p.y, -p.z);
-		if (leftRef.current)  leftRef.current.position.set(-p.x, -p.y, -p.z);
-		if (rightRef.current) rightRef.current.position.set(-p.x, -p.y, -p.z);
+		let x, y, z;
+		if (frozenRef.current) {
+			const anchor = frozenAnchorRef.current;
+			const origin = originPosRef.current;
+			const active = activePosRef.current;
+			if (!anchor || !origin) return;
+			x = anchor.x + (active.x - origin.x);
+			y = anchor.y + (active.y - origin.y);
+			z = anchor.z + (active.z - origin.z);
+		} else {
+			const t = Math.max(0, Math.min(1, playheadRef.current));
+			const N = spline.length - 1;
+			const i0 = Math.min(Math.floor(t * N), N);
+			const i1 = Math.min(i0 + 1, N);
+			const frac = t * N - i0;
+			const p0 = spline[i0], p1 = spline[i1];
+			x = -(p0.x + (p1.x - p0.x) * frac);
+			y = -(p0.y + (p1.y - p0.y) * frac);
+			z = -(p0.z + (p1.z - p0.z) * frac);
+			activePosRef.current = { x, y, z };
+			if (!originPosRef.current) originPosRef.current = { x, y, z };
+		}
+		if (roadRef.current)  roadRef.current.position.set(x, y, z);
+		if (leftRef.current)  leftRef.current.position.set(x, y, z);
+		if (rightRef.current) rightRef.current.position.set(x, y, z);
 	});
 
 	return (
@@ -216,9 +231,9 @@ function RoadMeshProcedural({ cfg, playheadRef, playhead, pushed }) {
 	);
 }
 
-export function RoadMesh({ cfg, playhead, playheadRef, pushed }) {
+export function RoadMesh({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, pushed }) {
 	if (cfg.waveformUrl) {
-		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} playhead={playhead} pushed={pushed} />;
+		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} pushed={pushed} />;
 	}
-	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} playhead={playhead} pushed={pushed} />;
+	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} pushed={pushed} />;
 }

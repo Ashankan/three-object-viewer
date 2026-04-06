@@ -931,14 +931,16 @@ export default function EnvironmentFront(props) {
 	const [messageHistory, setMessageHistory] = useState();
 	const [loaded, setLoaded] = useState(false);
 	const [spawnPoints, setSpawnPoints] = useState([0, 0, 0]);
-	const [roadPlayhead, setRoadPlayhead] = useState(0);
 	const roadPlayheadRef = useRef(0);
-	const frozenPlayheadRef = useRef(0);
-	const frozenOffsetRef = useRef(0);
 	const prevMapPostIdRef = useRef(null);
-	const roadClearTimerRef = useRef(null);
-	const [roadCfg, setRoadCfg] = useState(null);
-	const [prevRoadCfg, setPrevRoadCfg] = useState(null);
+	const activeSlotRef = useRef('A');
+	const slotAFrozenRef = useRef(true);
+	const slotBFrozenRef = useRef(true);
+	const activePosRef   = useRef({ x: 0, y: 0, z: 0 });
+	const originPosRef   = useRef(null);
+	const frozenAnchorRef = useRef(null);
+	const [slotA, setSlotA] = useState({ cfg: null, frozen: true });
+	const [slotB, setSlotB] = useState({ cfg: null, frozen: true });
 	const [messageObject, setMessageObject] = useState({
 		tone: "happy",
 		message: "hello!"
@@ -1001,14 +1003,18 @@ export default function EnvironmentFront(props) {
 							unitsPerSec: 8,
 							duration: 60
 					  };
-				setRoadCfg({
+				const newCfg = {
 					...geom,
 					waveformUrl: g("tdm-waveform-url"),
 					controlPoints: JSON.parse(
 						el.querySelector(".tdm-control-points")?.dataset
 							?.points || "[]"
 					)
-				});
+				};
+				if (activeSlotRef.current === 'A') slotAFrozenRef.current = false;
+				else slotBFrozenRef.current = false;
+				const setActive = activeSlotRef.current === 'A' ? setSlotA : setSlotB;
+				setActive({ cfg: newCfg, frozen: false });
 			})
 			.catch(() => {});
 	}
@@ -1029,32 +1035,33 @@ export default function EnvironmentFront(props) {
 			if (player) {
 				const mapPostId = player.getCurrentItem()?.map_post_id ?? null;
 				if (mapPostId !== prevMapPostIdRef.current) {
-					// Song changed. roadPlayheadRef.current still holds the previous
-					// frame's value — store it as the offset for the old road.
-					frozenOffsetRef.current = roadPlayheadRef.current;
 					prevMapPostIdRef.current = mapPostId;
-					// Move old road to frozen slot, start fresh for the new song.
-					setRoadCfg((current) => { setPrevRoadCfg(current); return null; });
+					const wasActive = activeSlotRef.current;
+					const next = wasActive === 'A' ? 'B' : 'A';
+					// Snapshot position and reset origin before freeze — same frame.
+					frozenAnchorRef.current = { ...activePosRef.current };
+					originPosRef.current = null;
+					// Freeze synchronously via ref — takes effect this same frame.
+					if (wasActive === 'A') slotAFrozenRef.current = true;
+					else slotBFrozenRef.current = true;
+					// Switch active slot — next slot stays frozen until new cfg loads.
+					activeSlotRef.current = next;
+					// Update React state for cfg/pushed changes.
+					const setWas = wasActive === 'A' ? setSlotA : setSlotB;
+					setWas(s => ({ ...s, frozen: true }));
+					const setNext = next === 'A' ? setSlotA : setSlotB;
+					setNext({ cfg: null, frozen: false });
 					roadPlayheadRef.current = 0;
 					if (mapPostId) fetchRoadCfg();
-					// Remove the old road after 2s.
-					if (roadClearTimerRef.current) clearTimeout(roadClearTimerRef.current);
-					roadClearTimerRef.current = setTimeout(() => setPrevRoadCfg(null), 2000);
 				}
 				const ct = player.getCurrentTime();
 				const dur = player.getDuration();
 				if (dur > 0) roadPlayheadRef.current = ct / dur;
-				// Old road moves in sync with the new playhead, offset so its frozen
-				// position aligns with world origin when the new song starts.
-				frozenPlayheadRef.current = frozenOffsetRef.current + roadPlayheadRef.current;
 			}
 			raf = requestAnimationFrame(tick);
 		}
 		raf = requestAnimationFrame(tick);
-		return () => {
-			cancelAnimationFrame(raf);
-			if (roadClearTimerRef.current) clearTimeout(roadClearTimerRef.current);
-		};
+		return () => cancelAnimationFrame(raf);
 	}, [props.roadToAdd]);
 
 	if (loaded === true) {
@@ -1107,20 +1114,29 @@ export default function EnvironmentFront(props) {
 									/>
 								)}
 								<ContextBridgeComponent />
-								{props.roadToAdd && prevRoadCfg && (
+								{props.roadToAdd && slotA.cfg && (
 									<Suspense fallback={null}>
 										<RoadMesh
-											cfg={prevRoadCfg}
-											playheadRef={frozenPlayheadRef}
-											pushed
+											cfg={slotA.cfg}
+											playheadRef={roadPlayheadRef}
+											frozenRef={slotAFrozenRef}
+											activePosRef={activePosRef}
+											originPosRef={originPosRef}
+											frozenAnchorRef={frozenAnchorRef}
+											pushed={slotA.frozen}
 										/>
 									</Suspense>
 								)}
-								{props.roadToAdd && roadCfg && (
+								{props.roadToAdd && slotB.cfg && (
 									<Suspense fallback={null}>
 										<RoadMesh
-											cfg={roadCfg}
+											cfg={slotB.cfg}
 											playheadRef={roadPlayheadRef}
+											frozenRef={slotBFrozenRef}
+											activePosRef={activePosRef}
+											originPosRef={originPosRef}
+											frozenAnchorRef={frozenAnchorRef}
+											pushed={slotB.frozen}
 										/>
 									</Suspense>
 								)}

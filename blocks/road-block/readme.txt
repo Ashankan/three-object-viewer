@@ -1,11 +1,17 @@
 == Next to do ==
 
+Sometimes now; previous-map shows at end of current-map, but not always. It is replaced when next track loads.
+Hard to reproduce, but I have witnessed it a couple of times.
+The scrub bar also stops working some times, and suddenly it works again...
+_
+Should look at adding a 3rd container for chaching next-map.
+
+== Done in previous edit ==
+_ 
 Change freeze duration 2s to remove to "something else" as condition.
 The remove condition will be changed in the future when more functionality is in place.
 I think a good enough remove condition for this stage is that the old-map isn't removed until current-map becomes old-map.
 This way the old map will stay in place when using the scrub on the media-bar.
-
-== Done in previous edit ==
 _
 I would like to make the snapshot offset world origin so that snapshot position becomes 0 at snapshot position, and let playhead still move it.
 With this edit the old map should movie in sync with the new map before it's removed:
