@@ -107,7 +107,7 @@ function buildEdgeGeos(geo, N) {
 	};
 }
 
-function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, pushed }) {
+function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, pushed }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -123,6 +123,15 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 		return Math.max(0, Math.round((1 - xfSecs / dur) * N));
 	}, [cfg]);
 	const crossfadeLineGeo = useMemo(() => buildCrossfadeLineGeo(geo, markerIdx), [geo, markerIdx]);
+	const crossfadeCenterLocal = useMemo(() => {
+		const pos = geo.attributes.position;
+		const i = markerIdx;
+		return {
+			x: (pos.getX(i*2) + pos.getX(i*2+1)) / 2,
+			y: (pos.getY(i*2) + pos.getY(i*2+1)) / 2,
+			z: (pos.getZ(i*2) + pos.getZ(i*2+1)) / 2,
+		};
+	}, [geo, markerIdx]);
 
 	const [texture, setTexture] = useState(() => makeProceduralTex());
 
@@ -164,6 +173,13 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 			z = -(p0.z + (p1.z - p0.z) * frac);
 			activePosRef.current = { x, y, z };
 			if (!originPosRef.current) originPosRef.current = { x, y, z };
+			if (crossfadeWorldPosRef) {
+				crossfadeWorldPosRef.current = {
+					x: crossfadeCenterLocal.x + x,
+					y: crossfadeCenterLocal.y + y,
+					z: crossfadeCenterLocal.z + z,
+				};
+			}
 		}
 		if (roadRef.current)  roadRef.current.position.set(x, y, z);
 		if (leftRef.current)  leftRef.current.position.set(x, y, z);
@@ -214,7 +230,7 @@ function makeProceduralTex() {
 	return tex;
 }
 
-function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, pushed }) {
+function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, pushed }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -231,6 +247,15 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 		return Math.max(0, Math.round((1 - xfSecs / dur) * N));
 	}, [cfg]);
 	const crossfadeLineGeo = useMemo(() => buildCrossfadeLineGeo(geo, markerIdx), [geo, markerIdx]);
+	const crossfadeCenterLocal = useMemo(() => {
+		const pos = geo.attributes.position;
+		const i = markerIdx;
+		return {
+			x: (pos.getX(i*2) + pos.getX(i*2+1)) / 2,
+			y: (pos.getY(i*2) + pos.getY(i*2+1)) / 2,
+			z: (pos.getZ(i*2) + pos.getZ(i*2+1)) / 2,
+		};
+	}, [geo, markerIdx]);
 
 	useFrame(() => {
 		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.visible = !frozenRef.current;
@@ -255,6 +280,13 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 			z = -(p0.z + (p1.z - p0.z) * frac);
 			activePosRef.current = { x, y, z };
 			if (!originPosRef.current) originPosRef.current = { x, y, z };
+			if (crossfadeWorldPosRef) {
+				crossfadeWorldPosRef.current = {
+					x: crossfadeCenterLocal.x + x,
+					y: crossfadeCenterLocal.y + y,
+					z: crossfadeCenterLocal.z + z,
+				};
+			}
 		}
 		if (roadRef.current)  roadRef.current.position.set(x, y, z);
 		if (leftRef.current)  leftRef.current.position.set(x, y, z);
@@ -280,9 +312,9 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 	);
 }
 
-export function RoadMesh({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, pushed }) {
+export function RoadMesh({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, pushed }) {
 	if (cfg.waveformUrl) {
-		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} pushed={pushed} />;
+		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} pushed={pushed} />;
 	}
-	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} pushed={pushed} />;
+	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} pushed={pushed} />;
 }

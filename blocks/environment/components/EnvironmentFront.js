@@ -939,8 +939,13 @@ export default function EnvironmentFront(props) {
 	const activePosRef   = useRef({ x: 0, y: 0, z: 0 });
 	const originPosRef   = useRef(null);
 	const frozenAnchorRef = useRef(null);
+	const crossfadeWorldPosRef = useRef({ x: 0, y: 0, z: 0 });
 	const [slotA, setSlotA] = useState({ cfg: null, frozen: true });
 	const [slotB, setSlotB] = useState({ cfg: null, frozen: true });
+	const [previewCfg, setPreviewCfg] = useState(null);
+	const previewFrozenRef = useRef(true);
+	const previewOriginRef = useRef({ x: 0, y: 0, z: 0 });
+	const previewAnchorRef = useRef({ x: 0, y: 0, z: 0 });
 	const [messageObject, setMessageObject] = useState({
 		tone: "happy",
 		message: "hello!"
@@ -949,6 +954,61 @@ export default function EnvironmentFront(props) {
 	const [url, setURL] = useState(
 		props.threeUrl ? props.threeUrl : threeObjectPlugin + defaultEnvironment
 	);
+
+	// Resolve the next track's map_post_id by peeking at the queue/random pool.
+	function getNextMapPostId() {
+		const playlist = window.MediaBarPlaylist;
+		const random   = window.MediaBarRandomPlaylist;
+		if (playlist) {
+			const inject = playlist.getInjectNext();
+			if (inject && inject.map_post_id) return inject.map_post_id;
+			const q = playlist.getQueue();
+			if (q.length > 0 && q[0].map_post_id) return q[0].map_post_id;
+		}
+		if (random) {
+			const peek = random.peekNext();
+			if (peek && peek.map_post_id) return peek.map_post_id;
+		}
+		return null;
+	}
+
+	// Fetch 3D map cfg for the NEXT track in the queue (preview map).
+	function fetchPreviewRoadCfg() {
+		const nextId = getNextMapPostId();
+		if (!nextId) { setPreviewCfg(null); return; }
+		fetch("/wp-json/wp/v2/posts/" + nextId + "?_fields=content")
+			.then((r) => r.json())
+			.then((data) => {
+				const html = data?.content?.rendered || "";
+				const tmp = document.createElement("div");
+				tmp.innerHTML = html;
+				const el = tmp.querySelector(".three-object-three-app-3d-map");
+				if (!el) { setPreviewCfg(null); return; }
+				const g = (cls) => {
+					const e = el.querySelector("." + cls);
+					return e ? e.textContent.trim() : "";
+				};
+				const roadBlockEl = document.querySelector(
+					".three-object-three-app-road-block"
+				);
+				const geom = roadBlockEl
+					? {
+							roadWidth: parseFloat(roadBlockEl.querySelector(".road-block-width")?.textContent) || 2.5,
+							segments: parseInt(roadBlockEl.querySelector(".road-block-segments")?.textContent) || 160,
+							unitsPerSec: parseFloat(roadBlockEl.querySelector(".road-block-ups")?.textContent) || 8,
+							duration: parseFloat(roadBlockEl.querySelector(".road-block-duration")?.textContent) || 60
+					  }
+					: { roadWidth: 2.5, segments: 160, unitsPerSec: 8, duration: 60 };
+				setPreviewCfg({
+					...geom,
+					waveformUrl: g("tdm-waveform-url"),
+					controlPoints: JSON.parse(
+						el.querySelector(".tdm-control-points")?.dataset?.points || "[]"
+					)
+				});
+			})
+			.catch(() => { setPreviewCfg(null); });
+	}
 
 	// Fetch 3D map data from the post linked to the current media-bar track.
 	function fetchRoadCfg() {
@@ -1015,6 +1075,8 @@ export default function EnvironmentFront(props) {
 				else slotBFrozenRef.current = false;
 				const setActive = activeSlotRef.current === 'A' ? setSlotA : setSlotB;
 				setActive({ cfg: newCfg, frozen: false });
+				// After loading the active map, fetch the preview for the next track.
+				fetchPreviewRoadCfg();
 			})
 			.catch(() => {});
 	}
@@ -1044,6 +1106,8 @@ export default function EnvironmentFront(props) {
 			const setNext = next === 'A' ? setSlotA : setSlotB;
 			setNext({ cfg: null, frozen: false });
 			roadPlayheadRef.current = 0;
+			// Clear preview — it just became the active map.
+			setPreviewCfg(null);
 			if (mapPostId) fetchRoadCfg();
 		}
 
@@ -1126,6 +1190,7 @@ export default function EnvironmentFront(props) {
 											activePosRef={activePosRef}
 											originPosRef={originPosRef}
 											frozenAnchorRef={frozenAnchorRef}
+											crossfadeWorldPosRef={crossfadeWorldPosRef}
 											pushed={slotA.frozen}
 										/>
 									</Suspense>
@@ -1139,7 +1204,21 @@ export default function EnvironmentFront(props) {
 											activePosRef={activePosRef}
 											originPosRef={originPosRef}
 											frozenAnchorRef={frozenAnchorRef}
+											crossfadeWorldPosRef={crossfadeWorldPosRef}
 											pushed={slotB.frozen}
+										/>
+									</Suspense>
+								)}
+								{props.roadToAdd && previewCfg && (
+									<Suspense fallback={null}>
+										<RoadMesh
+											cfg={previewCfg}
+											playheadRef={roadPlayheadRef}
+											frozenRef={previewFrozenRef}
+											activePosRef={crossfadeWorldPosRef}
+											originPosRef={previewOriginRef}
+											frozenAnchorRef={previewAnchorRef}
+											pushed={true}
 										/>
 									</Suspense>
 								)}

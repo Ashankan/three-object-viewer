@@ -1,9 +1,11 @@
 == Next to do ==
 
-need to add next track at crossfade line.
+Bug: need to fix stale crossfade data so that ther's no gap between current and next map on some tracks.
 
 
 == Done in previous edit ==
+_ 
+need to add next track at crossfade line.
 _
 fixed crossfade marker position to sit at correct time, and removed marker from previous map so that it doesn't come on top of new map if track is skipped.
 _
