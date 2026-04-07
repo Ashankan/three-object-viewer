@@ -117,7 +117,8 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 	const edgeGeos = useMemo(() => buildEdgeGeos(geo, cfg.segments || 160), [geo]);
 	const markerIdx = useMemo(() => {
 		const N = cfg.segments || 160;
-		const dur = cfg.duration || 60;
+		const playerDur = window.MediaBarPlayer?.getDuration();
+		const dur = (isFinite(playerDur) && playerDur > 0) ? playerDur : (cfg.duration || 60);
 		const xfSecs = window.MediaBarConfig?.globalCrossfade ?? 2.0;
 		return Math.max(0, Math.round((1 - xfSecs / dur) * N));
 	}, [cfg]);
@@ -141,6 +142,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 	}, [cfg.waveformUrl]);
 
 	useFrame(() => {
+		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.visible = !frozenRef.current;
 		let x, y, z;
 		if (frozenRef.current) {
 			const anchor = frozenAnchorRef.current;
@@ -223,13 +225,15 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 	const edgeGeos = useMemo(() => buildEdgeGeos(geo, cfg.segments || 160), [geo]);
 	const markerIdx = useMemo(() => {
 		const N = cfg.segments || 160;
-		const dur = cfg.duration || 60;
+		const playerDur = window.MediaBarPlayer?.getDuration();
+		const dur = (isFinite(playerDur) && playerDur > 0) ? playerDur : (cfg.duration || 60);
 		const xfSecs = window.MediaBarConfig?.globalCrossfade ?? 2.0;
 		return Math.max(0, Math.round((1 - xfSecs / dur) * N));
 	}, [cfg]);
 	const crossfadeLineGeo = useMemo(() => buildCrossfadeLineGeo(geo, markerIdx), [geo, markerIdx]);
 
 	useFrame(() => {
+		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.visible = !frozenRef.current;
 		let x, y, z;
 		if (frozenRef.current) {
 			const anchor = frozenAnchorRef.current;

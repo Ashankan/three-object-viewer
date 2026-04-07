@@ -1,9 +1,11 @@
 == Next to do ==
 
-need to get crossfade marjer to linbe up correctly.
+need to add next track at crossfade line.
 
 
 == Done in previous edit ==
+_
+fixed crossfade marker position to sit at correct time, and removed marker from previous map so that it doesn't come on top of new map if track is skipped.
 _
 changed texture to not freeze whilewaiting for next map load, doesn't really help since mesh isn't loaded for next track and it still lags a little.
 
