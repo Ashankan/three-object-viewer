@@ -1,10 +1,13 @@
 == Next to do ==
 
-Should look at adding a 3rd container for chaching next-map.
-we need a way to measure time in world units so that we can attach the next-map to the right world cordinate on current track (at end but minus crossfade time) and let current track run next-track just like it runs previous-map.
-On next track play it should just resync to playhead, Important to let fix the logic so so all 3 containers shuffle correctly.
+need to get crossfade marjer to linbe up correctly.
+
 
 == Done in previous edit ==
+_
+changed texture to not freeze whilewaiting for next map load, doesn't really help since mesh isn't loaded for next track and it still lags a little.
+
+also added yellow line at crossfade point on road-mesh. the line doesn't align at the correct point.
 _
 Sometimes now; previous-map shows at end of current-map, but not always. It is replaced when next track loads.
 Hard to reproduce, but I have witnessed it a couple of times.

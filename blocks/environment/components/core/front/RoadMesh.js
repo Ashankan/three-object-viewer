@@ -1,6 +1,6 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useState, useEffect } from "react";
 import * as THREE from "three";
-import { useFrame, useLoader } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { TextureLoader } from "three";
 
 function catmullRom(p0, p1, p2, p3, t) {
@@ -86,6 +86,14 @@ function buildGeometry(cfg) {
 	return { geo, spline };
 }
 
+function buildCrossfadeLineGeo(geo, markerIdx) {
+	const pos = geo.attributes.position;
+	const i = markerIdx;
+	const L = new THREE.Vector3(pos.getX(i*2),   pos.getY(i*2)   + 0.04, pos.getZ(i*2));
+	const R = new THREE.Vector3(pos.getX(i*2+1), pos.getY(i*2+1) + 0.04, pos.getZ(i*2+1));
+	return new THREE.BufferGeometry().setFromPoints([L, R]);
+}
+
 function buildEdgeGeos(geo, N) {
 	const pos = geo.attributes.position;
 	const L = [], R = [];
@@ -103,13 +111,34 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
+	const crossfadeMarkerRef = useRef();
 
 	const { geo, spline } = useMemo(() => buildGeometry(cfg), [cfg]);
 	const edgeGeos = useMemo(() => buildEdgeGeos(geo, cfg.segments || 160), [geo]);
+	const markerIdx = useMemo(() => {
+		const N = cfg.segments || 160;
+		const dur = cfg.duration || 60;
+		const xfSecs = window.MediaBarConfig?.globalCrossfade ?? 2.0;
+		return Math.max(0, Math.round((1 - xfSecs / dur) * N));
+	}, [cfg]);
+	const crossfadeLineGeo = useMemo(() => buildCrossfadeLineGeo(geo, markerIdx), [geo, markerIdx]);
 
-	const texture = useLoader(TextureLoader, cfg.waveformUrl);
-	texture.wrapS = THREE.RepeatWrapping;
-	texture.wrapT = THREE.RepeatWrapping;
+	const [texture, setTexture] = useState(() => makeProceduralTex());
+
+	useEffect(() => {
+		let cancelled = false;
+		const loader = new TextureLoader();
+		loader.load(
+			cfg.waveformUrl,
+			(tex) => {
+				if (cancelled) { tex.dispose(); return; }
+				tex.wrapS = THREE.RepeatWrapping;
+				tex.wrapT = THREE.RepeatWrapping;
+				setTexture((prev) => { prev.dispose(); return tex; });
+			}
+		);
+		return () => { cancelled = true; };
+	}, [cfg.waveformUrl]);
 
 	useFrame(() => {
 		let x, y, z;
@@ -137,6 +166,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 		if (roadRef.current)  roadRef.current.position.set(x, y, z);
 		if (leftRef.current)  leftRef.current.position.set(x, y, z);
 		if (rightRef.current) rightRef.current.position.set(x, y, z);
+		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.position.set(x, y, z);
 	});
 
 	return (
@@ -149,6 +179,9 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 			</line>
 			<line ref={rightRef} geometry={edgeGeos.rightGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
+			</line>
+			<line ref={crossfadeMarkerRef} geometry={crossfadeLineGeo} renderOrder={1}>
+				<lineBasicMaterial color={0xffff00} depthTest={false} />
 			</line>
 		</>
 	);
@@ -183,10 +216,18 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
+	const crossfadeMarkerRef = useRef();
 	const texture  = useMemo(() => makeProceduralTex(), []);
 
 	const { geo, spline } = useMemo(() => buildGeometry(cfg), [cfg]);
 	const edgeGeos = useMemo(() => buildEdgeGeos(geo, cfg.segments || 160), [geo]);
+	const markerIdx = useMemo(() => {
+		const N = cfg.segments || 160;
+		const dur = cfg.duration || 60;
+		const xfSecs = window.MediaBarConfig?.globalCrossfade ?? 2.0;
+		return Math.max(0, Math.round((1 - xfSecs / dur) * N));
+	}, [cfg]);
+	const crossfadeLineGeo = useMemo(() => buildCrossfadeLineGeo(geo, markerIdx), [geo, markerIdx]);
 
 	useFrame(() => {
 		let x, y, z;
@@ -214,6 +255,7 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 		if (roadRef.current)  roadRef.current.position.set(x, y, z);
 		if (leftRef.current)  leftRef.current.position.set(x, y, z);
 		if (rightRef.current) rightRef.current.position.set(x, y, z);
+		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.position.set(x, y, z);
 	});
 
 	return (
@@ -226,6 +268,9 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 			</line>
 			<line ref={rightRef} geometry={edgeGeos.rightGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
+			</line>
+			<line ref={crossfadeMarkerRef} geometry={crossfadeLineGeo} renderOrder={1}>
+				<lineBasicMaterial color={0xffff00} depthTest={false} />
 			</line>
 		</>
 	);
