@@ -1,6 +1,7 @@
 == Next to do ==
 
-Bug: need to fix gap between current and next map that always appear one time in playlist cycle.
+3-Slot Ring System — Road Map Transition Architecture
+three-object-viewer\blocks\road-block\THREE_SLOT_RING_PLAN.md
 
 
 == Done in previous edit ==
