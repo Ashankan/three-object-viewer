@@ -1,9 +1,11 @@
 == Next to do ==
 
-Bug: need to fix stale crossfade data so that ther's no gap between current and next map on some tracks.
+Bug: need to fix gap between current and next map that always appear one time in playlist cycle.
 
 
 == Done in previous edit ==
+_ 
+Fixed map id on on next map on pressing previous song.
 _ 
 need to add next track at crossfade line.
 _

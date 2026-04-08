@@ -955,16 +955,46 @@ export default function EnvironmentFront(props) {
 		props.threeUrl ? props.threeUrl : threeObjectPlugin + defaultEnvironment
 	);
 
-	// Resolve the next track's map_post_id by peeking at the queue/random pool.
+	// Peek at what advanceToNext() will play next, without consuming it.
+	// Must mirror the exact priority logic in media-bar.js advanceToNext().
 	function getNextMapPostId() {
 		const playlist = window.MediaBarPlaylist;
 		const random   = window.MediaBarRandomPlaylist;
+
+		// 1. If playlist module is in log navigation (user pressed previous),
+		//    the next track comes from playedLog, not the queue or random pool.
+		if (playlist && playlist.isInLogNavigation()) {
+			const log = playlist.getPlayedLog();
+			// getPlayedLog() is a copy. We can't read logPosition directly,
+			// but we know the currently-playing track is at logPosition.
+			// The player's current item tells us where we are in the log.
+			const current = window.MediaBarPlayer?.getCurrentItem();
+			if (current && log.length > 0) {
+				// Find current item's position in the log.
+				let curIdx = -1;
+				for (let i = log.length - 1; i >= 0; i--) {
+					if (log[i].id === current.id) { curIdx = i; break; }
+				}
+				if (curIdx >= 0 && curIdx + 1 < log.length) {
+					const next = log[curIdx + 1];
+					if (next && next.map_post_id) return next.map_post_id;
+				}
+			}
+			// At end of log — next advance will exit log nav and fall through
+			// to inject/queue/random below.
+		}
+
+		// 2. advanceToNext checks: queue.length > 0 || injectNext || isInLogNavigation
+		//    If any of those are true, it calls MediaBarPlaylist.next() which
+		//    checks inject first, then queue. We already handled log nav above.
 		if (playlist) {
 			const inject = playlist.getInjectNext();
 			if (inject && inject.map_post_id) return inject.map_post_id;
 			const q = playlist.getQueue();
 			if (q.length > 0 && q[0].map_post_id) return q[0].map_post_id;
 		}
+
+		// 3. No playlist/inject/queue/log — random pool.
 		if (random) {
 			const peek = random.peekNext();
 			if (peek && peek.map_post_id) return peek.map_post_id;
