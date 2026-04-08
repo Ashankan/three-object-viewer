@@ -190,7 +190,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 	return (
 		<>
 			<mesh ref={roadRef} geometry={geo}>
-				<meshBasicMaterial map={texture} side={THREE.DoubleSide} polygonOffset={pushed} polygonOffsetFactor={pushed ? 1 : 0} polygonOffsetUnits={pushed ? 1 : 0} />
+				<meshBasicMaterial map={texture} side={THREE.DoubleSide} polygonOffset={pushed !== 0} polygonOffsetFactor={pushed} polygonOffsetUnits={pushed} />
 			</mesh>
 			<line ref={leftRef} geometry={edgeGeos.leftGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
@@ -297,7 +297,7 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 	return (
 		<>
 			<mesh ref={roadRef} geometry={geo}>
-				<meshBasicMaterial map={texture} side={THREE.DoubleSide} polygonOffset={pushed} polygonOffsetFactor={pushed ? 1 : 0} polygonOffsetUnits={pushed ? 1 : 0} />
+				<meshBasicMaterial map={texture} side={THREE.DoubleSide} polygonOffset={pushed !== 0} polygonOffsetFactor={pushed} polygonOffsetUnits={pushed} />
 			</mesh>
 			<line ref={leftRef} geometry={edgeGeos.leftGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />

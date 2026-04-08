@@ -1,12 +1,13 @@
 == Next to do ==
 
-need to make next map polygon layer higher than current, make sure previous stays below current.
-_
 Need to stitch the crossover mesh points between the 3 maps.
-A mesh morph function for the maps also. 
+A mesh morph function for the maps also to warp from current to next when skipping.
+warpipng from no playback to full playback: no playback = straight road, full playback full curcature of road-mesh.
 
 
 == Done in previous edit ==
+_ 
+need to make next map polygon layer higher than current, make sure previous stays below current.
 _ 
 Fixed smooth scrolling on map transition, still a little jittery
 _

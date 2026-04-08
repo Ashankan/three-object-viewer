@@ -985,6 +985,12 @@ export default function EnvironmentFront(props) {
 		if (slot === 'B') return slotBOriginRef;
 		return slotCOriginRef;
 	}
+	// Returns polygon offset layer: next=above(−1), active=0, previous=below(+1)
+	function getSlotLayer(slot) {
+		if (rolesRef.current.next === slot) return -1;
+		if (rolesRef.current.previous === slot) return 1;
+		return 0;
+	}
 	const [messageObject, setMessageObject] = useState({
 		tone: "happy",
 		message: "hello!"
@@ -1315,7 +1321,7 @@ export default function EnvironmentFront(props) {
 								originPosRef={rolesRef.current.next === 'A' ? slotAOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'A' ? slotAAnchorRef : frozenAnchorRef}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
-								pushed={rolesRef.current.active !== 'A'}
+								pushed={getSlotLayer('A')}
 								/>
 								</Suspense>
 								)}
@@ -1329,7 +1335,7 @@ export default function EnvironmentFront(props) {
 								originPosRef={rolesRef.current.next === 'B' ? slotBOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'B' ? slotBAnchorRef : frozenAnchorRef}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
-								pushed={rolesRef.current.active !== 'B'}
+								pushed={getSlotLayer('B')}
 								/>
 								</Suspense>
 								)}
@@ -1343,7 +1349,7 @@ export default function EnvironmentFront(props) {
 								originPosRef={rolesRef.current.next === 'C' ? slotCOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'C' ? slotCAnchorRef : frozenAnchorRef}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
-								pushed={rolesRef.current.active !== 'C'}
+								pushed={getSlotLayer('C')}
 								/>
 								</Suspense>
 								)}
