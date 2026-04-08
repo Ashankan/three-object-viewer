@@ -934,6 +934,7 @@ export default function EnvironmentFront(props) {
 	const roadPlayheadRef = useRef(0);
 	const prevMapPostIdRef = useRef(null);
 	const rolesRef = useRef({ active: 'A', previous: null, next: null });
+	const pendingTransitionRef = useRef(null); // { wasActive } — set by onSongChange, consumed by fetchRoadCfg .then()
 
 	// Per-slot cfg state (drives geometry rebuild on change)
 	const [slotACfg, setSlotACfg] = useState(null);
@@ -1091,7 +1092,6 @@ export default function EnvironmentFront(props) {
 		if (!player) return;
 		const item = player.getCurrentItem();
 		if (!item || !item.map_post_id) return;
-		const activeSlot = rolesRef.current.active;
 		fetch("/wp-json/wp/v2/posts/" + item.map_post_id + "?_fields=content")
 			.then((r) => r.json())
 			.then((data) => {
@@ -1147,10 +1147,49 @@ export default function EnvironmentFront(props) {
 							?.points || "[]"
 					)
 				};
-				getSlotFrozenRef(activeSlot).current = false;
-				getSlotOriginRef(activeSlot).current = null;
-				getSlotAnchorRef(activeSlot).current = null;
-				getSlotCfgSetter(activeSlot)(newCfg);
+				// Execute deferred transition if pending
+				const pending = pendingTransitionRef.current;
+				if (pending) {
+					pendingTransitionRef.current = null;
+					const { wasActive, wasPrevious, wasNext } = pending;
+
+					// Pick new active slot — never same as wasActive
+					let newActive;
+					if (wasNext && wasNext !== wasActive) {
+						newActive = wasNext;
+					} else {
+						newActive = ['A','B','C'].find(s => s !== wasActive) || 'B';
+					}
+
+					// Recycle old previous
+					if (wasPrevious && wasPrevious !== wasActive && wasPrevious !== newActive) {
+						getSlotCfgSetter(wasPrevious)(null);
+						getSlotFrozenRef(wasPrevious).current = true;
+						getSlotAnchorRef(wasPrevious).current = null;
+						getSlotOriginRef(wasPrevious).current = null;
+					}
+
+					const recycledSlot = ['A','B','C'].find(s => s !== newActive && s !== wasActive) || null;
+
+					// NOW freeze old active → becomes previous
+					getSlotFrozenRef(wasActive).current = true;
+					frozenAnchorRef.current = { ...activePosRef.current };
+					originPosRef.current = null;
+
+					// Update roles
+					rolesRef.current = {
+						active: newActive,
+						previous: wasActive,
+						next: recycledSlot,
+					};
+				}
+
+				// Unfreeze and set cfg on new active
+				const activeSlotNow = rolesRef.current.active;
+				getSlotFrozenRef(activeSlotNow).current = false;
+				getSlotOriginRef(activeSlotNow).current = null;
+				getSlotAnchorRef(activeSlotNow).current = null;
+				getSlotCfgSetter(activeSlotNow)(newCfg);
 
 				// Assign next role if not yet set, then fetch preview
 				if (!rolesRef.current.next) {
@@ -1176,48 +1215,17 @@ export default function EnvironmentFront(props) {
 
 		function onSongChange(mapPostId) {
 			prevMapPostIdRef.current = mapPostId;
-			const roles = rolesRef.current;
-			const wasActive   = roles.active;
-			const wasPrevious = roles.previous;
-			const wasNext     = roles.next;
 
-			// 1. Freeze old active → becomes previous
-			getSlotFrozenRef(wasActive).current = true;
-			frozenAnchorRef.current = { ...activePosRef.current };
-			originPosRef.current = null;
-
-			// 2. Pick the new active slot — never the same as wasActive
-			let newActive;
-			if (wasNext && wasNext !== wasActive) {
-				newActive = wasNext;
-			} else {
-				// No valid wasNext: pick any slot that isn't wasActive
-				newActive = ['A','B','C'].find(s => s !== wasActive) || 'B';
-			}
-			getSlotFrozenRef(newActive).current = false;
-
-			// 3. Recycle old previous (free its geometry)
-			if (wasPrevious && wasPrevious !== wasActive && wasPrevious !== newActive) {
-				getSlotCfgSetter(wasPrevious)(null);
-				getSlotFrozenRef(wasPrevious).current = true;
-				getSlotAnchorRef(wasPrevious).current = null;
-				getSlotOriginRef(wasPrevious).current = null;
-			}
-
-			// 4. The recycled/next slot is whichever slot is not active or previous
-			const recycledSlot = ['A','B','C'].find(s => s !== newActive && s !== wasActive) || null;
-
-			// 5. Update roles
-			rolesRef.current = {
-				active: newActive,
-				previous: wasActive,
-				next: recycledSlot,
+			// Don't transition yet — just record intent and start fetching.
+			// The actual freeze/unfreeze/role-update happens in fetchRoadCfg .then()
+			// so the old active keeps driving smoothly until the new cfg is ready.
+			pendingTransitionRef.current = {
+				mapPostId,
+				wasActive: rolesRef.current.active,
+				wasPrevious: rolesRef.current.previous,
+				wasNext: rolesRef.current.next,
 			};
 
-			roadPlayheadRef.current = 0;
-
-			// 6. Always fetch the active map fresh — the promoted next slot
-			//    may have stale preview cfg (e.g. after pressing previous).
 			if (mapPostId) {
 				fetchRoadCfg();
 			}
@@ -1230,11 +1238,15 @@ export default function EnvironmentFront(props) {
 			if (player) {
 				const mapPostId = player.getCurrentItem()?.map_post_id ?? null;
 				if (mapPostId !== prevMapPostIdRef.current) onSongChange(mapPostId);
-				const ct = player.getCurrentTime();
-				const dur = player.getDuration();
-				const effectiveDur = (isFinite(dur) && dur > 0) ? dur : lastValidDuration;
-				if (isFinite(dur) && dur > 0) lastValidDuration = dur;
-				if (effectiveDur > 0) roadPlayheadRef.current = ct / effectiveDur;
+				// Don't update playhead while a transition is pending — the old active
+				// should hold its last position rather than jump to the new track's time=0
+				if (!pendingTransitionRef.current) {
+					const ct = player.getCurrentTime();
+					const dur = player.getDuration();
+					const effectiveDur = (isFinite(dur) && dur > 0) ? dur : lastValidDuration;
+					if (isFinite(dur) && dur > 0) lastValidDuration = dur;
+					if (effectiveDur > 0) roadPlayheadRef.current = ct / effectiveDur;
+				}
 			}
 			raf = requestAnimationFrame(tick);
 		}

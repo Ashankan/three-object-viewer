@@ -1,12 +1,14 @@
 == Next to do ==
 
-Fix smooth scrolling on map transition.
+need to make next map polygon layer higher than current, make sure previous stays below current.
 _
 Need to stitch the crossover mesh points between the 3 maps.
 A mesh morph function for the maps also. 
 
 
 == Done in previous edit ==
+_ 
+Fixed smooth scrolling on map transition, still a little jittery
 _
 fixed pressing previous track puts next map at playhead.
 _
