@@ -933,19 +933,57 @@ export default function EnvironmentFront(props) {
 	const [spawnPoints, setSpawnPoints] = useState([0, 0, 0]);
 	const roadPlayheadRef = useRef(0);
 	const prevMapPostIdRef = useRef(null);
-	const activeSlotRef = useRef('A');
+	const rolesRef = useRef({ active: 'A', previous: null, next: null });
+
+	// Per-slot cfg state (drives geometry rebuild on change)
+	const [slotACfg, setSlotACfg] = useState(null);
+	const [slotBCfg, setSlotBCfg] = useState(null);
+	const [slotCCfg, setSlotCCfg] = useState(null);
+
+	// Per-slot frozen refs
 	const slotAFrozenRef = useRef(true);
 	const slotBFrozenRef = useRef(true);
+	const slotCFrozenRef = useRef(true);
+
+	// Per-slot anchor refs (snapshot at freeze/load time)
+	const slotAAnchorRef = useRef(null);
+	const slotBAnchorRef = useRef(null);
+	const slotCAnchorRef = useRef(null);
+
+	// Per-slot origin refs (auto-captured on first frozen frame)
+	const slotAOriginRef = useRef(null);
+	const slotBOriginRef = useRef(null);
+	const slotCOriginRef = useRef(null);
+
+	// Shared refs (active slot writes, frozen slots read)
 	const activePosRef   = useRef({ x: 0, y: 0, z: 0 });
+	const crossfadeWorldPosRef = useRef({ x: 0, y: 0, z: 0 });
+
+	// Shared origin/anchor for active↔previous handoff (exactly like old 2-slot system)
 	const originPosRef   = useRef(null);
 	const frozenAnchorRef = useRef(null);
-	const crossfadeWorldPosRef = useRef({ x: 0, y: 0, z: 0 });
-	const [slotA, setSlotA] = useState({ cfg: null, frozen: true });
-	const [slotB, setSlotB] = useState({ cfg: null, frozen: true });
-	const [previewCfg, setPreviewCfg] = useState(null);
-	const previewFrozenRef = useRef(true);
-	const previewOriginRef = useRef({ x: 0, y: 0, z: 0 });
-	const previewAnchorRef = useRef({ x: 0, y: 0, z: 0 });
+
+	// Helper functions to access per-slot refs by slot name
+	function getSlotFrozenRef(slot) {
+		if (slot === 'A') return slotAFrozenRef;
+		if (slot === 'B') return slotBFrozenRef;
+		return slotCFrozenRef;
+	}
+	function getSlotCfgSetter(slot) {
+		if (slot === 'A') return setSlotACfg;
+		if (slot === 'B') return setSlotBCfg;
+		return setSlotCCfg;
+	}
+	function getSlotAnchorRef(slot) {
+		if (slot === 'A') return slotAAnchorRef;
+		if (slot === 'B') return slotBAnchorRef;
+		return slotCAnchorRef;
+	}
+	function getSlotOriginRef(slot) {
+		if (slot === 'A') return slotAOriginRef;
+		if (slot === 'B') return slotBOriginRef;
+		return slotCOriginRef;
+	}
 	const [messageObject, setMessageObject] = useState({
 		tone: "happy",
 		message: "hello!"
@@ -1004,8 +1042,10 @@ export default function EnvironmentFront(props) {
 
 	// Fetch 3D map cfg for the NEXT track in the queue (preview map).
 	function fetchPreviewRoadCfg() {
+		const nextSlot = rolesRef.current.next;
+		if (!nextSlot) return;
 		const nextId = getNextMapPostId();
-		if (!nextId) { setPreviewCfg(null); return; }
+		if (!nextId) { getSlotCfgSetter(nextSlot)(null); return; }
 		fetch("/wp-json/wp/v2/posts/" + nextId + "?_fields=content")
 			.then((r) => r.json())
 			.then((data) => {
@@ -1013,7 +1053,7 @@ export default function EnvironmentFront(props) {
 				const tmp = document.createElement("div");
 				tmp.innerHTML = html;
 				const el = tmp.querySelector(".three-object-three-app-3d-map");
-				if (!el) { setPreviewCfg(null); return; }
+				if (!el) { getSlotCfgSetter(nextSlot)(null); return; }
 				const g = (cls) => {
 					const e = el.querySelector("." + cls);
 					return e ? e.textContent.trim() : "";
@@ -1029,15 +1069,20 @@ export default function EnvironmentFront(props) {
 							duration: parseFloat(roadBlockEl.querySelector(".road-block-duration")?.textContent) || 60
 					  }
 					: { roadWidth: 2.5, segments: 160, unitsPerSec: 8, duration: 60 };
-				setPreviewCfg({
+				const cfg = {
 					...geom,
 					waveformUrl: g("tdm-waveform-url"),
 					controlPoints: JSON.parse(
 						el.querySelector(".tdm-control-points")?.dataset?.points || "[]"
 					)
-				});
+				};
+				getSlotCfgSetter(nextSlot)(cfg);
+				getSlotFrozenRef(nextSlot).current = true;
+				// Anchor at crossfade marker, origin at current active pos
+				getSlotAnchorRef(nextSlot).current = { ...crossfadeWorldPosRef.current };
+				getSlotOriginRef(nextSlot).current = { ...activePosRef.current };
 			})
-			.catch(() => { setPreviewCfg(null); });
+			.catch(() => { getSlotCfgSetter(nextSlot)(null); });
 	}
 
 	// Fetch 3D map data from the post linked to the current media-bar track.
@@ -1046,6 +1091,7 @@ export default function EnvironmentFront(props) {
 		if (!player) return;
 		const item = player.getCurrentItem();
 		if (!item || !item.map_post_id) return;
+		const activeSlot = rolesRef.current.active;
 		fetch("/wp-json/wp/v2/posts/" + item.map_post_id + "?_fields=content")
 			.then((r) => r.json())
 			.then((data) => {
@@ -1101,11 +1147,17 @@ export default function EnvironmentFront(props) {
 							?.points || "[]"
 					)
 				};
-				if (activeSlotRef.current === 'A') slotAFrozenRef.current = false;
-				else slotBFrozenRef.current = false;
-				const setActive = activeSlotRef.current === 'A' ? setSlotA : setSlotB;
-				setActive({ cfg: newCfg, frozen: false });
-				// After loading the active map, fetch the preview for the next track.
+				getSlotFrozenRef(activeSlot).current = false;
+				getSlotOriginRef(activeSlot).current = null;
+				getSlotAnchorRef(activeSlot).current = null;
+				getSlotCfgSetter(activeSlot)(newCfg);
+
+				// Assign next role if not yet set, then fetch preview
+				if (!rolesRef.current.next) {
+					// First load: A is active, assign C as next
+					const candidates = ['A','B','C'].filter(s => s !== rolesRef.current.active && s !== rolesRef.current.previous);
+					rolesRef.current.next = candidates[0] || null;
+				}
 				fetchPreviewRoadCfg();
 			})
 			.catch(() => {});
@@ -1124,21 +1176,53 @@ export default function EnvironmentFront(props) {
 
 		function onSongChange(mapPostId) {
 			prevMapPostIdRef.current = mapPostId;
-			const wasActive = activeSlotRef.current;
-			const next = wasActive === 'A' ? 'B' : 'A';
+			const roles = rolesRef.current;
+			const wasActive   = roles.active;
+			const wasPrevious = roles.previous;
+			const wasNext     = roles.next;
+
+			// 1. Freeze old active → becomes previous
+			getSlotFrozenRef(wasActive).current = true;
 			frozenAnchorRef.current = { ...activePosRef.current };
 			originPosRef.current = null;
-			if (wasActive === 'A') slotAFrozenRef.current = true;
-			else slotBFrozenRef.current = true;
-			activeSlotRef.current = next;
-			const setWas = wasActive === 'A' ? setSlotA : setSlotB;
-			setWas(s => ({ ...s, frozen: true }));
-			const setNext = next === 'A' ? setSlotA : setSlotB;
-			setNext({ cfg: null, frozen: false });
+
+			// 2. Pick the new active slot — never the same as wasActive
+			let newActive;
+			if (wasNext && wasNext !== wasActive) {
+				newActive = wasNext;
+			} else {
+				// No valid wasNext: pick any slot that isn't wasActive
+				newActive = ['A','B','C'].find(s => s !== wasActive) || 'B';
+			}
+			getSlotFrozenRef(newActive).current = false;
+
+			// 3. Recycle old previous (free its geometry)
+			if (wasPrevious && wasPrevious !== wasActive && wasPrevious !== newActive) {
+				getSlotCfgSetter(wasPrevious)(null);
+				getSlotFrozenRef(wasPrevious).current = true;
+				getSlotAnchorRef(wasPrevious).current = null;
+				getSlotOriginRef(wasPrevious).current = null;
+			}
+
+			// 4. The recycled/next slot is whichever slot is not active or previous
+			const recycledSlot = ['A','B','C'].find(s => s !== newActive && s !== wasActive) || null;
+
+			// 5. Update roles
+			rolesRef.current = {
+				active: newActive,
+				previous: wasActive,
+				next: recycledSlot,
+			};
+
 			roadPlayheadRef.current = 0;
-			// Clear preview — it just became the active map.
-			setPreviewCfg(null);
-			if (mapPostId) fetchRoadCfg();
+
+			// 6. If promoted next already had cfg, just fetch preview.
+			//    Otherwise fetch the active map first.
+			if (wasNext && wasNext === newActive && mapPostId) {
+				fetchPreviewRoadCfg();
+			} else if (mapPostId) {
+				fetchRoadCfg();
+			}
 		}
 
 		let raf;
@@ -1211,46 +1295,47 @@ export default function EnvironmentFront(props) {
 									/>
 								)}
 								<ContextBridgeComponent />
-								{props.roadToAdd && slotA.cfg && (
-									<Suspense fallback={null}>
-										<RoadMesh
-											cfg={slotA.cfg}
-											playheadRef={roadPlayheadRef}
-											frozenRef={slotAFrozenRef}
-											activePosRef={activePosRef}
-											originPosRef={originPosRef}
-											frozenAnchorRef={frozenAnchorRef}
-											crossfadeWorldPosRef={crossfadeWorldPosRef}
-											pushed={slotA.frozen}
-										/>
-									</Suspense>
+								{props.roadToAdd && slotACfg && (
+								<Suspense fallback={null}>
+								<RoadMesh
+								cfg={slotACfg}
+								playheadRef={roadPlayheadRef}
+								frozenRef={slotAFrozenRef}
+								activePosRef={activePosRef}
+								originPosRef={rolesRef.current.next === 'A' ? slotAOriginRef : originPosRef}
+								frozenAnchorRef={rolesRef.current.next === 'A' ? slotAAnchorRef : frozenAnchorRef}
+								crossfadeWorldPosRef={crossfadeWorldPosRef}
+								pushed={rolesRef.current.active !== 'A'}
+								/>
+								</Suspense>
 								)}
-								{props.roadToAdd && slotB.cfg && (
-									<Suspense fallback={null}>
-										<RoadMesh
-											cfg={slotB.cfg}
-											playheadRef={roadPlayheadRef}
-											frozenRef={slotBFrozenRef}
-											activePosRef={activePosRef}
-											originPosRef={originPosRef}
-											frozenAnchorRef={frozenAnchorRef}
-											crossfadeWorldPosRef={crossfadeWorldPosRef}
-											pushed={slotB.frozen}
-										/>
-									</Suspense>
+								{props.roadToAdd && slotBCfg && (
+								<Suspense fallback={null}>
+								<RoadMesh
+								cfg={slotBCfg}
+								playheadRef={roadPlayheadRef}
+								frozenRef={slotBFrozenRef}
+								activePosRef={activePosRef}
+								originPosRef={rolesRef.current.next === 'B' ? slotBOriginRef : originPosRef}
+								frozenAnchorRef={rolesRef.current.next === 'B' ? slotBAnchorRef : frozenAnchorRef}
+								crossfadeWorldPosRef={crossfadeWorldPosRef}
+								pushed={rolesRef.current.active !== 'B'}
+								/>
+								</Suspense>
 								)}
-								{props.roadToAdd && previewCfg && (
-									<Suspense fallback={null}>
-										<RoadMesh
-											cfg={previewCfg}
-											playheadRef={roadPlayheadRef}
-											frozenRef={previewFrozenRef}
-											activePosRef={crossfadeWorldPosRef}
-											originPosRef={previewOriginRef}
-											frozenAnchorRef={previewAnchorRef}
-											pushed={true}
-										/>
-									</Suspense>
+								{props.roadToAdd && slotCCfg && (
+								<Suspense fallback={null}>
+								<RoadMesh
+								cfg={slotCCfg}
+								playheadRef={roadPlayheadRef}
+								frozenRef={slotCFrozenRef}
+								activePosRef={activePosRef}
+								originPosRef={rolesRef.current.next === 'C' ? slotCOriginRef : originPosRef}
+								frozenAnchorRef={rolesRef.current.next === 'C' ? slotCAnchorRef : frozenAnchorRef}
+								crossfadeWorldPosRef={crossfadeWorldPosRef}
+								pushed={rolesRef.current.active !== 'C'}
+								/>
+								</Suspense>
 								)}
 								<Physics
 								// debug

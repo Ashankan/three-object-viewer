@@ -1,10 +1,16 @@
 == Next to do ==
 
-3-Slot Ring System — Road Map Transition Architecture
-three-object-viewer\blocks\road-block\THREE_SLOT_RING_PLAN.md
+fix pressing previous track puts next map at playhead.
+_
+Need to stitch the crossover mesh points between the 3 maps.
+A mesh morph function for the maps also. 
 
 
 == Done in previous edit ==
+_
+added:
+3-Slot Ring System — Road Map Transition Architecture
+three-object-viewer\blocks\road-block\THREE_SLOT_RING_PLAN.md
 _ 
 Fixed map id on on next map on pressing previous song.
 _ 
