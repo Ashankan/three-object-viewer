@@ -1,12 +1,14 @@
 == Next to do ==
 
-fix pressing previous track puts next map at playhead.
+Fix smooth scrolling on map transition.
 _
 Need to stitch the crossover mesh points between the 3 maps.
 A mesh morph function for the maps also. 
 
 
 == Done in previous edit ==
+_
+fixed pressing previous track puts next map at playhead.
 _
 added:
 3-Slot Ring System — Road Map Transition Architecture

@@ -1216,11 +1216,9 @@ export default function EnvironmentFront(props) {
 
 			roadPlayheadRef.current = 0;
 
-			// 6. If promoted next already had cfg, just fetch preview.
-			//    Otherwise fetch the active map first.
-			if (wasNext && wasNext === newActive && mapPostId) {
-				fetchPreviewRoadCfg();
-			} else if (mapPostId) {
+			// 6. Always fetch the active map fresh — the promoted next slot
+			//    may have stale preview cfg (e.g. after pressing previous).
+			if (mapPostId) {
 				fetchRoadCfg();
 			}
 		}
