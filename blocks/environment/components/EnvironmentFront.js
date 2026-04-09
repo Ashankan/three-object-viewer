@@ -959,6 +959,7 @@ export default function EnvironmentFront(props) {
 	// Shared refs (active slot writes, frozen slots read)
 	const activePosRef   = useRef({ x: 0, y: 0, z: 0 });
 	const crossfadeWorldPosRef = useRef({ x: 0, y: 0, z: 0 });
+	const crossfadeHeadingRef  = useRef({ x: 0, y: 0, z: -1 }); // default: straight ahead
 
 	// Shared origin/anchor for active↔previous handoff (exactly like old 2-slot system)
 	const originPosRef   = useRef(null);
@@ -1076,12 +1077,30 @@ export default function EnvironmentFront(props) {
 							duration: parseFloat(roadBlockEl.querySelector(".road-block-duration")?.textContent) || 60
 					  }
 					: { roadWidth: 2.5, segments: 160, unitsPerSec: 8, duration: 60 };
+				const controlPoints = JSON.parse(
+					el.querySelector(".tdm-control-points")?.dataset?.points || "[]"
+				);
+
+				// Compute phantom predecessor for C1 continuity at join
+				const sortedPts = controlPoints.length >= 2
+					? [...controlPoints].sort((a, b) => a.t - b.t)
+					: [{ t: 0, x: 0, y: 0 }, { t: 1, x: 0, y: 0 }];
+				const tLen = (geom.duration || 60) * (geom.unitsPerSec || 8);
+				const w0x = sortedPts[0].x, w0y = sortedPts[0].y || 0, w0z = -sortedPts[0].t * tLen;
+				const w1x = sortedPts[1].x, w1y = sortedPts[1].y || 0, w1z = -sortedPts[1].t * tLen;
+				const seg = Math.sqrt((w1x-w0x)**2 + (w1y-w0y)**2 + (w1z-w0z)**2) || 1;
+				const h = crossfadeHeadingRef.current;
+				const phantomPrev = {
+					x: w1x - 2 * seg * h.x,
+					y: w1y - 2 * seg * h.y,
+					z: w1z - 2 * seg * h.z,
+				};
+
 				const cfg = {
 					...geom,
 					waveformUrl: g("tdm-waveform-url"),
-					controlPoints: JSON.parse(
-						el.querySelector(".tdm-control-points")?.dataset?.points || "[]"
-					)
+					controlPoints,
+					phantomPrev,
 				};
 				getSlotCfgSetter(nextSlot)(cfg);
 				getSlotFrozenRef(nextSlot).current = true;
@@ -1321,6 +1340,7 @@ export default function EnvironmentFront(props) {
 								originPosRef={rolesRef.current.next === 'A' ? slotAOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'A' ? slotAAnchorRef : frozenAnchorRef}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
+								crossfadeHeadingRef={crossfadeHeadingRef}
 								pushed={getSlotLayer('A')}
 								/>
 								</Suspense>
@@ -1335,6 +1355,7 @@ export default function EnvironmentFront(props) {
 								originPosRef={rolesRef.current.next === 'B' ? slotBOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'B' ? slotBAnchorRef : frozenAnchorRef}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
+								crossfadeHeadingRef={crossfadeHeadingRef}
 								pushed={getSlotLayer('B')}
 								/>
 								</Suspense>
@@ -1349,6 +1370,7 @@ export default function EnvironmentFront(props) {
 								originPosRef={rolesRef.current.next === 'C' ? slotCOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'C' ? slotCAnchorRef : frozenAnchorRef}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
+								crossfadeHeadingRef={crossfadeHeadingRef}
 								pushed={getSlotLayer('C')}
 								/>
 								</Suspense>

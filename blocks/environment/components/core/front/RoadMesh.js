@@ -12,7 +12,7 @@ function catmullRom(p0, p1, p2, p3, t) {
 	);
 }
 
-function sampleSpline(worldPts, N) {
+function sampleSpline(worldPts, N, phantomPrev = null) {
 	const result = [];
 	const segs = worldPts.length - 1;
 	for (let i = 0; i <= N; i++) {
@@ -20,7 +20,7 @@ function sampleSpline(worldPts, N) {
 		const raw = u * segs;
 		const si = Math.min(Math.floor(raw), segs - 1);
 		const lt = raw - si;
-		const p0 = worldPts[Math.max(si - 1, 0)];
+		const p0 = (si === 0 && phantomPrev) ? phantomPrev : worldPts[Math.max(si - 1, 0)];
 		const p1 = worldPts[si];
 		const p2 = worldPts[Math.min(si + 1, worldPts.length - 1)];
 		const p3 = worldPts[Math.min(si + 2, worldPts.length - 1)];
@@ -40,7 +40,10 @@ function buildGeometry(cfg) {
 		: [{ t: 0, x: 0, y: 0 }, { t: 1, x: 0, y: 0 }];
 
 	const worldPts = sorted.map(p => new THREE.Vector3(p.x, p.y || 0, -p.t * totalLen));
-	const spline = sampleSpline(worldPts, N);
+	const phantomPrev = cfg.phantomPrev
+		? new THREE.Vector3(cfg.phantomPrev.x, cfg.phantomPrev.y || 0, cfg.phantomPrev.z)
+		: null;
+	const spline = sampleSpline(worldPts, N, phantomPrev);
 
 	const dists = [0];
 	for (let i = 1; i < spline.length; i++) dists.push(dists[i-1] + spline[i].distanceTo(spline[i-1]));
@@ -107,7 +110,7 @@ function buildEdgeGeos(geo, N) {
 	};
 }
 
-function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, pushed, isActive }) {
+function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, pushed, isActive }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -132,6 +135,13 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 			z: (pos.getZ(i*2) + pos.getZ(i*2+1)) / 2,
 		};
 	}, [geo, markerIdx]);
+	const crossfadeHeadingLocal = useMemo(() => {
+		const N = spline.length - 1;
+		const nxt = spline[Math.min(markerIdx + 1, N)];
+		const prv = spline[Math.max(markerIdx - 1, 0)];
+		const fwd = new THREE.Vector3().subVectors(nxt, prv).normalize();
+		return { x: fwd.x, y: fwd.y, z: fwd.z };
+	}, [spline, markerIdx]);
 
 	const [texture, setTexture] = useState(() => makeProceduralTex());
 
@@ -179,6 +189,9 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 					y: crossfadeCenterLocal.y + y,
 					z: crossfadeCenterLocal.z + z,
 				};
+			}
+			if (crossfadeHeadingRef) {
+				crossfadeHeadingRef.current = { ...crossfadeHeadingLocal };
 			}
 		}
 		if (roadRef.current)  roadRef.current.position.set(x, y, z);
@@ -230,7 +243,7 @@ function makeProceduralTex() {
 	return tex;
 }
 
-function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, pushed, isActive }) {
+function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, pushed, isActive }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -256,6 +269,13 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 			z: (pos.getZ(i*2) + pos.getZ(i*2+1)) / 2,
 		};
 	}, [geo, markerIdx]);
+	const crossfadeHeadingLocal = useMemo(() => {
+		const N = spline.length - 1;
+		const nxt = spline[Math.min(markerIdx + 1, N)];
+		const prv = spline[Math.max(markerIdx - 1, 0)];
+		const fwd = new THREE.Vector3().subVectors(nxt, prv).normalize();
+		return { x: fwd.x, y: fwd.y, z: fwd.z };
+	}, [spline, markerIdx]);
 
 	useFrame(() => {
 		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.visible = !frozenRef.current;
@@ -287,6 +307,9 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 					z: crossfadeCenterLocal.z + z,
 				};
 			}
+			if (crossfadeHeadingRef) {
+				crossfadeHeadingRef.current = { ...crossfadeHeadingLocal };
+			}
 		}
 		if (roadRef.current)  roadRef.current.position.set(x, y, z);
 		if (leftRef.current)  leftRef.current.position.set(x, y, z);
@@ -312,9 +335,9 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 	);
 }
 
-export function RoadMesh({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, pushed, isActive }) {
+export function RoadMesh({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, pushed, isActive }) {
 	if (cfg.waveformUrl) {
-		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} pushed={pushed} isActive={isActive} />;
+		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} pushed={pushed} isActive={isActive} />;
 	}
-	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} pushed={pushed} isActive={isActive} />;
+	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} pushed={pushed} isActive={isActive} />;
 }
