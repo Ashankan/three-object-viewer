@@ -1,11 +1,14 @@
 == Next to do ==
 
-Need to stitch the crossover mesh points between the 3 maps.
+need to mask texture in front of playhead/offset of previous map so that it doesn't show paralel to  current map when mesh control points diverge.
+_ 
 A mesh morph function for the maps also to warp from current to next when skipping.
 warpipng from no playback to full playback: no playback = straight road, full playback full curcature of road-mesh.
 
 
 == Done in previous edit ==
+_ 
+Need to stitch the crossover mesh points between the 3 maps.
 _ 
 need to make next map polygon layer higher than current, make sure previous stays below current.
 _ 

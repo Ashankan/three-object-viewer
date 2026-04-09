@@ -960,6 +960,7 @@ export default function EnvironmentFront(props) {
 	const activePosRef   = useRef({ x: 0, y: 0, z: 0 });
 	const crossfadeWorldPosRef = useRef({ x: 0, y: 0, z: 0 });
 	const crossfadeHeadingRef  = useRef({ x: 0, y: 0, z: -1 }); // default: straight ahead
+	const currentHeadingRef    = useRef({ x: 0, y: 0, z: -1 }); // heading at current playhead position
 
 	// Shared origin/anchor for active↔previous handoff (exactly like old 2-slot system)
 	const originPosRef   = useRef(null);
@@ -1164,13 +1165,36 @@ export default function EnvironmentFront(props) {
 							unitsPerSec: 8,
 							duration: 60
 					  };
+				const activeCfgControlPoints = JSON.parse(
+					el.querySelector(".tdm-control-points")?.dataset
+						?.points || "[]"
+				);
+
+				// If a transition is about to happen, capture heading NOW (old active still writing it)
+				// and compute phantomPrev so the new active map starts at the correct angle.
+				const isPendingTransition = pendingTransitionRef.current !== null;
+				let transitionPhantomPrev = null;
+				if (isPendingTransition) {
+					const sortedPts = activeCfgControlPoints.length >= 2
+						? [...activeCfgControlPoints].sort((a, b) => a.t - b.t)
+						: [{ t: 0, x: 0, y: 0 }, { t: 1, x: 0, y: 0 }];
+					const tLen = (geom.duration || 60) * (geom.unitsPerSec || 8);
+					const w0x = sortedPts[0].x, w0y = sortedPts[0].y || 0, w0z = -sortedPts[0].t * tLen;
+					const w1x = sortedPts[1].x, w1y = sortedPts[1].y || 0, w1z = -sortedPts[1].t * tLen;
+					const seg = Math.sqrt((w1x-w0x)**2 + (w1y-w0y)**2 + (w1z-w0z)**2) || 1;
+					const h = currentHeadingRef.current;
+					transitionPhantomPrev = {
+						x: w1x - 2 * seg * h.x,
+						y: w1y - 2 * seg * h.y,
+						z: w1z - 2 * seg * h.z,
+					};
+				}
+
 				const newCfg = {
 					...geom,
 					waveformUrl: g("tdm-waveform-url"),
-					controlPoints: JSON.parse(
-						el.querySelector(".tdm-control-points")?.dataset
-							?.points || "[]"
-					)
+					controlPoints: activeCfgControlPoints,
+					...(transitionPhantomPrev ? { phantomPrev: transitionPhantomPrev } : {}),
 				};
 				// Execute deferred transition if pending
 				const pending = pendingTransitionRef.current;
@@ -1341,6 +1365,7 @@ export default function EnvironmentFront(props) {
 								frozenAnchorRef={rolesRef.current.next === 'A' ? slotAAnchorRef : frozenAnchorRef}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
 								crossfadeHeadingRef={crossfadeHeadingRef}
+								currentHeadingRef={currentHeadingRef}
 								pushed={getSlotLayer('A')}
 								/>
 								</Suspense>
@@ -1356,6 +1381,7 @@ export default function EnvironmentFront(props) {
 								frozenAnchorRef={rolesRef.current.next === 'B' ? slotBAnchorRef : frozenAnchorRef}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
 								crossfadeHeadingRef={crossfadeHeadingRef}
+								currentHeadingRef={currentHeadingRef}
 								pushed={getSlotLayer('B')}
 								/>
 								</Suspense>
@@ -1371,6 +1397,7 @@ export default function EnvironmentFront(props) {
 								frozenAnchorRef={rolesRef.current.next === 'C' ? slotCAnchorRef : frozenAnchorRef}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
 								crossfadeHeadingRef={crossfadeHeadingRef}
+								currentHeadingRef={currentHeadingRef}
 								pushed={getSlotLayer('C')}
 								/>
 								</Suspense>
