@@ -1246,8 +1246,15 @@ export default function EnvironmentFront(props) {
 					getSlotFrozenRef(wasActive).current = true;
 					getSlotFrozenAsPrevRef(wasActive).current = true;
 					frozenAnchorRef.current = { ...activePosRef.current };
-					// Clip index: same cycle as anchor, same activePosRef snapshot
-					getSlotClipIndexRef(wasActive).current = Math.floor(roadPlayheadRef.current * (geom.segments || 160));
+					// Clip index: extend by crossfade world length so previous map covers the gap.
+					// Use actual player duration (same as RoadMesh markerIdx) so the segment
+					// fraction matches how roadPlayheadRef is normalised.
+					const _N          = geom.segments || 160;
+					const _playerDur  = window.MediaBarPlayer?.getDuration();
+					const _dur        = (isFinite(_playerDur) && _playerDur > 0) ? _playerDur : (geom.duration || 60);
+					const _xfSecs     = window.MediaBarConfig?.globalCrossfade ?? 2.0;
+					const _xfSegments = Math.round((_xfSecs / _dur) * _N);
+					getSlotClipIndexRef(wasActive).current = Math.min(_N, Math.floor(roadPlayheadRef.current * _N) + _xfSegments);
 					originPosRef.current = null;
 
 					// Update roles
