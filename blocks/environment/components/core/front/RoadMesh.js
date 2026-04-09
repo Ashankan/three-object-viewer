@@ -110,7 +110,7 @@ function buildEdgeGeos(geo, N) {
 	};
 }
 
-function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive }) {
+function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -162,6 +162,22 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, activePosRef, origin
 
 	useFrame(() => {
 		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.visible = !frozenRef.current;
+
+		// Clip previous-slot geometry — before any early return so it always fires.
+		if (frozenAsPrevRef?.current) {
+			const idx = clipIndexRef?.current ?? 0;
+			const count = idx * 6;
+			if (geo.drawRange.count !== count) {
+				geo.setDrawRange(0, count);
+				edgeGeos.leftGeo.setDrawRange(0,  idx + 1);
+				edgeGeos.rightGeo.setDrawRange(0, idx + 1);
+			}
+		} else if (geo.drawRange.count !== Infinity) {
+			geo.setDrawRange(0, Infinity);
+			edgeGeos.leftGeo.setDrawRange(0,  Infinity);
+			edgeGeos.rightGeo.setDrawRange(0, Infinity);
+		}
+
 		let x, y, z;
 		if (frozenRef.current) {
 			const anchor = frozenAnchorRef.current;
@@ -249,7 +265,7 @@ function makeProceduralTex() {
 	return tex;
 }
 
-function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive }) {
+function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -285,6 +301,22 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 
 	useFrame(() => {
 		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.visible = !frozenRef.current;
+
+		// Clip previous-slot geometry — before any early return so it always fires.
+		if (frozenAsPrevRef?.current) {
+			const idx = clipIndexRef?.current ?? 0;
+			const count = idx * 6;
+			if (geo.drawRange.count !== count) {
+				geo.setDrawRange(0, count);
+				edgeGeos.leftGeo.setDrawRange(0,  idx + 1);
+				edgeGeos.rightGeo.setDrawRange(0, idx + 1);
+			}
+		} else if (geo.drawRange.count !== Infinity) {
+			geo.setDrawRange(0, Infinity);
+			edgeGeos.leftGeo.setDrawRange(0,  Infinity);
+			edgeGeos.rightGeo.setDrawRange(0, Infinity);
+		}
+
 		let x, y, z;
 		if (frozenRef.current) {
 			const anchor = frozenAnchorRef.current;
@@ -347,9 +379,9 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, activePosRef, originP
 	);
 }
 
-export function RoadMesh({ cfg, playheadRef, frozenRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive }) {
+export function RoadMesh({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive }) {
 	if (cfg.waveformUrl) {
-		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} />;
+		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} />;
 	}
-	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} />;
+	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} />;
 }

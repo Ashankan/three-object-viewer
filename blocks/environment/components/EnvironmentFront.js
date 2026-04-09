@@ -946,6 +946,17 @@ export default function EnvironmentFront(props) {
 	const slotBFrozenRef = useRef(true);
 	const slotCFrozenRef = useRef(true);
 
+	// Per-slot "frozen as previous" refs — true only when slot is the previous (trailing) map
+	const slotAFrozenAsPrevRef = useRef(false);
+	const slotBFrozenAsPrevRef = useRef(false);
+	const slotCFrozenAsPrevRef = useRef(false);
+
+	// Per-slot clip index — segment index at which to cut the previous map's geometry,
+	// set in the same cycle as the anchor (both derived from activePosRef at freeze time)
+	const slotAClipIndexRef = useRef(0);
+	const slotBClipIndexRef = useRef(0);
+	const slotCClipIndexRef = useRef(0);
+
 	// Per-slot anchor refs (snapshot at freeze/load time)
 	const slotAAnchorRef = useRef(null);
 	const slotBAnchorRef = useRef(null);
@@ -971,6 +982,16 @@ export default function EnvironmentFront(props) {
 		if (slot === 'A') return slotAFrozenRef;
 		if (slot === 'B') return slotBFrozenRef;
 		return slotCFrozenRef;
+	}
+	function getSlotFrozenAsPrevRef(slot) {
+		if (slot === 'A') return slotAFrozenAsPrevRef;
+		if (slot === 'B') return slotBFrozenAsPrevRef;
+		return slotCFrozenAsPrevRef;
+	}
+	function getSlotClipIndexRef(slot) {
+		if (slot === 'A') return slotAClipIndexRef;
+		if (slot === 'B') return slotBClipIndexRef;
+		return slotCClipIndexRef;
 	}
 	function getSlotCfgSetter(slot) {
 		if (slot === 'A') return setSlotACfg;
@@ -1214,6 +1235,7 @@ export default function EnvironmentFront(props) {
 					if (wasPrevious && wasPrevious !== wasActive && wasPrevious !== newActive) {
 						getSlotCfgSetter(wasPrevious)(null);
 						getSlotFrozenRef(wasPrevious).current = true;
+						getSlotFrozenAsPrevRef(wasPrevious).current = false;
 						getSlotAnchorRef(wasPrevious).current = null;
 						getSlotOriginRef(wasPrevious).current = null;
 					}
@@ -1222,7 +1244,10 @@ export default function EnvironmentFront(props) {
 
 					// NOW freeze old active → becomes previous
 					getSlotFrozenRef(wasActive).current = true;
+					getSlotFrozenAsPrevRef(wasActive).current = true;
 					frozenAnchorRef.current = { ...activePosRef.current };
+					// Clip index: same cycle as anchor, same activePosRef snapshot
+					getSlotClipIndexRef(wasActive).current = Math.floor(roadPlayheadRef.current * (geom.segments || 160));
 					originPosRef.current = null;
 
 					// Update roles
@@ -1236,6 +1261,7 @@ export default function EnvironmentFront(props) {
 				// Unfreeze and set cfg on new active
 				const activeSlotNow = rolesRef.current.active;
 				getSlotFrozenRef(activeSlotNow).current = false;
+				getSlotFrozenAsPrevRef(activeSlotNow).current = false;
 				getSlotOriginRef(activeSlotNow).current = null;
 				getSlotAnchorRef(activeSlotNow).current = null;
 				getSlotCfgSetter(activeSlotNow)(newCfg);
@@ -1360,6 +1386,8 @@ export default function EnvironmentFront(props) {
 								cfg={slotACfg}
 								playheadRef={roadPlayheadRef}
 								frozenRef={slotAFrozenRef}
+								frozenAsPrevRef={slotAFrozenAsPrevRef}
+								clipIndexRef={slotAClipIndexRef}
 								activePosRef={activePosRef}
 								originPosRef={rolesRef.current.next === 'A' ? slotAOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'A' ? slotAAnchorRef : frozenAnchorRef}
@@ -1376,6 +1404,8 @@ export default function EnvironmentFront(props) {
 								cfg={slotBCfg}
 								playheadRef={roadPlayheadRef}
 								frozenRef={slotBFrozenRef}
+								frozenAsPrevRef={slotBFrozenAsPrevRef}
+								clipIndexRef={slotBClipIndexRef}
 								activePosRef={activePosRef}
 								originPosRef={rolesRef.current.next === 'B' ? slotBOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'B' ? slotBAnchorRef : frozenAnchorRef}
@@ -1392,6 +1422,8 @@ export default function EnvironmentFront(props) {
 								cfg={slotCCfg}
 								playheadRef={roadPlayheadRef}
 								frozenRef={slotCFrozenRef}
+								frozenAsPrevRef={slotCFrozenAsPrevRef}
+								clipIndexRef={slotCClipIndexRef}
 								activePosRef={activePosRef}
 								originPosRef={rolesRef.current.next === 'C' ? slotCOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'C' ? slotCAnchorRef : frozenAnchorRef}

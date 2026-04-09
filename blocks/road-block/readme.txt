@@ -1,12 +1,14 @@
 == Next to do ==
 
-need to mask texture in front of playhead/offset of previous map so that it doesn't show paralel to  current map when mesh control points diverge.
-_ 
+Check if audio units are used to calculate mesh length, crossfade marker, and previous map offset.
+_
 A mesh morph function for the maps also to warp from current to next when skipping.
 warpipng from no playback to full playback: no playback = straight road, full playback full curcature of road-mesh.
 
 
 == Done in previous edit ==
+_ 
+need to clip geometry in front of playhead/offset of previous map so that it doesn't show parallel to  current map.
 _ 
 Need to stitch the crossover mesh points between the 3 maps.
 _ 
