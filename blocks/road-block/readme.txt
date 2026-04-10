@@ -1,13 +1,17 @@
 == Next to do ==
 
-Set up mesh-warp to affect all layers for the road, both current and for future overlays and objects that may be added.
+Need to add start of track/map marking overlay that blends road stitching with an overlay.
 
-_ 
-warpipng from no playback to full playback:
-no playback (0) = straight road, full playback(1) full curvature of road-mesh, driven/animated by amplitude of playback speed.
+_
+
+Set up mesh-warp to affect all layers for the road, both current and for future overlays and objects that may be added.
+Outlines for road does currently not follow the morph.
 
 
 == Done in previous edit ==
+_ 
+warpipng from no playback to full playback:
+no playback (0) = straight road, full playback(1) full curvature of road-mesh, driven/animated by addition of playback speed.
 _ 
 A mesh morph function for when skipping track.
 When skipping track the current map geometry gets shifted to the new map right away.

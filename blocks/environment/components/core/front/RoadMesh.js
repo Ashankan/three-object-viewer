@@ -127,6 +127,24 @@ function buildMorphPositions(oldSpline, oldPlayheadIdx, newSpline, halfWidth) {
 	return positions;
 }
 
+/**
+ * Build absolute vertex positions for a "straight" version of this road
+ * (all control-point X/Y zeroed).  Used as GPU morph-target slot 0 so that
+ * morphTargetInfluences[0] = (1 - playbackSpeed) drives curvature in real-time:
+ *   influence  0  → normal curvature (base geometry)
+ *   influence  1  → straight road
+ *   influence -1  → double curvature
+ */
+function buildCurvatureMorphPositions(cfg) {
+	const straightCfg = {
+		...cfg,
+		controlPoints: (cfg.controlPoints || []).map(p => ({ ...p, x: 0, y: 0 })),
+		phantomPrev: cfg.phantomPrev ? { ...cfg.phantomPrev, x: 0, y: 0 } : null,
+	};
+	const { geo } = buildGeometry(straightCfg);
+	return new Float32Array(geo.attributes.position.array);
+}
+
 function buildCrossfadeLineGeo(geo, markerIdx) {
 	const pos = geo.attributes.position;
 	const i = markerIdx;
@@ -148,7 +166,7 @@ function buildEdgeGeos(geo, N) {
 	};
 }
 
-function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef }) {
+function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -162,12 +180,18 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 
 		if (splineExportRef) splineExportRef.current = result.spline;
 
+		// Slot 0: curvature morph (always present — straight road absolute positions).
+		// influence = (1 - playbackSpeed): 0=normal, 1=straight, -1=double curvature.
+		const curvPos = buildCurvatureMorphPositions(cfg);
+		result.geo.morphAttributes.position = [new THREE.BufferAttribute(curvPos, 3)];
+		result.geo.morphTargetsRelative = false;
+
 		const mf = morphFromRef?.current;
 		if (mf?.spline?.length > 1) {
 			const halfWidth = (cfg.roadWidth || 2.5) / 2;
 			const fromPos = buildMorphPositions(mf.spline, mf.playheadIdx, result.spline, halfWidth);
-			result.geo.morphAttributes.position = [new THREE.BufferAttribute(fromPos, 3)];
-			result.geo.morphTargetsRelative = false;
+			// Slot 1: transition morph (old road absolute positions).
+			result.geo.morphAttributes.position.push(new THREE.BufferAttribute(fromPos, 3));
 			return { ...result, morphXfSecs: mf.xfSecs, hasMorph: true };
 		}
 		return { ...result, morphXfSecs: 0, hasMorph: false };
@@ -219,11 +243,12 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 		morphElapsedRef.current = 0;
 		morphXfSecsRef.current = hasMorph ? morphXfSecs : 0;
 		morphActiveRef.current = hasMorph;
-		if (hasMorph && roadRef.current) {
+		if (roadRef.current) {
 			roadRef.current.updateMorphTargets();
-			if (roadRef.current.morphTargetInfluences?.length > 0) {
-				roadRef.current.morphTargetInfluences[0] = 1.0;
-			} else {
+			// Transition morph lives in slot 1; initialize it to full influence.
+			if (hasMorph && roadRef.current.morphTargetInfluences?.length > 1) {
+				roadRef.current.morphTargetInfluences[1] = 1.0;
+			} else if (hasMorph) {
 				morphActiveRef.current = false;
 			}
 		}
@@ -231,14 +256,24 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 	}, [geo]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	useFrame((_, delta) => {
-		if (morphActiveRef.current && roadRef.current?.morphTargetInfluences?.length > 0) {
+		// Transition morph — slot 1, fades old road → new road.
+		if (morphActiveRef.current && roadRef.current?.morphTargetInfluences?.length > 1) {
 			morphElapsedRef.current += delta;
 			const mt = Math.min(morphElapsedRef.current / morphXfSecsRef.current, 1.0);
-			roadRef.current.morphTargetInfluences[0] = 1.0 - mt;
+			roadRef.current.morphTargetInfluences[1] = 1.0 - mt;
 			if (mt >= 1.0) {
 				morphActiveRef.current = false;
-				roadRef.current.morphTargetInfluences[0] = 0;
+				roadRef.current.morphTargetInfluences[1] = 0;
 			}
+		}
+
+		// Curvature morph — slot 0, driven by playback speed every frame.
+		// influence = (1 - speed): 0=normal, 1=straight, -1=double.
+		let curvInfl = 0;
+		if (roadRef.current?.morphTargetInfluences?.length > 0) {
+			const speed = curvatureScaleRef?.current ?? 1.0;
+			curvInfl = Math.max(-1, Math.min(1, 1.0 - speed));
+			roadRef.current.morphTargetInfluences[0] = curvInfl;
 		}
 
 		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.visible = !frozenRef.current;
@@ -258,15 +293,22 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 			edgeGeos.rightGeo.setDrawRange(0, Infinity);
 		}
 
+		// lateralScale keeps every slot's playhead spine at world origin under morphing.
+		// activePosRef stores BASE (un-scaled) positions so frozen-slot tracking is
+		// consistent; the scale is applied identically to both frozen and active slots.
+		const lateralScale = 1.0 - curvInfl;
+
 		let x, y, z;
 		if (frozenRef.current) {
 			const anchor = frozenAnchorRef.current;
 			const origin = originPosRef.current;
 			const active = activePosRef.current;
 			if (!anchor || !origin) return;
-			x = anchor.x + (active.x - origin.x);
-			y = anchor.y + (active.y - origin.y);
+			const baseX = anchor.x + (active.x - origin.x);
+			const baseY = anchor.y + (active.y - origin.y);
 			z = anchor.z + (active.z - origin.z);
+			x = baseX * lateralScale;
+			y = baseY * lateralScale;
 		} else {
 			const t = Math.max(0, Math.min(1, playheadRef.current));
 			const N = spline.length - 1;
@@ -274,11 +316,14 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 			const i1 = Math.min(i0 + 1, N);
 			const frac = t * N - i0;
 			const p0 = spline[i0], p1 = spline[i1];
-			x = -(p0.x + (p1.x - p0.x) * frac);
-			y = -(p0.y + (p1.y - p0.y) * frac);
+			const baseX = -(p0.x + (p1.x - p0.x) * frac);
+			const baseY = -(p0.y + (p1.y - p0.y) * frac);
 			z = -(p0.z + (p1.z - p0.z) * frac);
-			activePosRef.current = { x, y, z };
-			if (!originPosRef.current) originPosRef.current = { x, y, z };
+			x = baseX * lateralScale;
+			y = baseY * lateralScale;
+			// Store base positions so frozen slots track unscaled movement.
+			activePosRef.current = { x: baseX, y: baseY, z };
+			if (!originPosRef.current) originPosRef.current = { x: baseX, y: baseY, z };
 			if (crossfadeWorldPosRef) {
 				crossfadeWorldPosRef.current = {
 					x: crossfadeCenterLocal.x + x,
@@ -345,7 +390,7 @@ function makeProceduralTex() {
 	return tex;
 }
 
-function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef }) {
+function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -360,12 +405,17 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 
 		if (splineExportRef) splineExportRef.current = result.spline;
 
+		// Slot 0: curvature morph (always present — straight road absolute positions).
+		const curvPos = buildCurvatureMorphPositions(cfg);
+		result.geo.morphAttributes.position = [new THREE.BufferAttribute(curvPos, 3)];
+		result.geo.morphTargetsRelative = false;
+
 		const mf = morphFromRef?.current;
 		if (mf?.spline?.length > 1) {
 			const halfWidth = (cfg.roadWidth || 2.5) / 2;
 			const fromPos = buildMorphPositions(mf.spline, mf.playheadIdx, result.spline, halfWidth);
-			result.geo.morphAttributes.position = [new THREE.BufferAttribute(fromPos, 3)];
-			result.geo.morphTargetsRelative = false;
+			// Slot 1: transition morph (old road absolute positions).
+			result.geo.morphAttributes.position.push(new THREE.BufferAttribute(fromPos, 3));
 			return { ...result, morphXfSecs: mf.xfSecs, hasMorph: true };
 		}
 		return { ...result, morphXfSecs: 0, hasMorph: false };
@@ -400,11 +450,11 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 		morphElapsedRef.current = 0;
 		morphXfSecsRef.current = hasMorph ? morphXfSecs : 0;
 		morphActiveRef.current = hasMorph;
-		if (hasMorph && roadRef.current) {
+		if (roadRef.current) {
 			roadRef.current.updateMorphTargets();
-			if (roadRef.current.morphTargetInfluences?.length > 0) {
-				roadRef.current.morphTargetInfluences[0] = 1.0;
-			} else {
+			if (hasMorph && roadRef.current.morphTargetInfluences?.length > 1) {
+				roadRef.current.morphTargetInfluences[1] = 1.0;
+			} else if (hasMorph) {
 				morphActiveRef.current = false;
 			}
 		}
@@ -412,14 +462,23 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 	}, [geo]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	useFrame((_, delta) => {
-		if (morphActiveRef.current && roadRef.current?.morphTargetInfluences?.length > 0) {
+		// Transition morph — slot 1, fades old road → new road.
+		if (morphActiveRef.current && roadRef.current?.morphTargetInfluences?.length > 1) {
 			morphElapsedRef.current += delta;
 			const mt = Math.min(morphElapsedRef.current / morphXfSecsRef.current, 1.0);
-			roadRef.current.morphTargetInfluences[0] = 1.0 - mt;
+			roadRef.current.morphTargetInfluences[1] = 1.0 - mt;
 			if (mt >= 1.0) {
 				morphActiveRef.current = false;
-				roadRef.current.morphTargetInfluences[0] = 0;
+				roadRef.current.morphTargetInfluences[1] = 0;
 			}
+		}
+
+		// Curvature morph — slot 0, driven by playback speed every frame.
+		let curvInfl = 0;
+		if (roadRef.current?.morphTargetInfluences?.length > 0) {
+			const speed = curvatureScaleRef?.current ?? 1.0;
+			curvInfl = Math.max(-1, Math.min(1, 1.0 - speed));
+			roadRef.current.morphTargetInfluences[0] = curvInfl;
 		}
 
 		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.visible = !frozenRef.current;
@@ -439,15 +498,19 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 			edgeGeos.rightGeo.setDrawRange(0, Infinity);
 		}
 
+		const lateralScale = 1.0 - curvInfl;
+
 		let x, y, z;
 		if (frozenRef.current) {
 			const anchor = frozenAnchorRef.current;
 			const origin = originPosRef.current;
 			const active = activePosRef.current;
 			if (!anchor || !origin) return;
-			x = anchor.x + (active.x - origin.x);
-			y = anchor.y + (active.y - origin.y);
+			const baseX = anchor.x + (active.x - origin.x);
+			const baseY = anchor.y + (active.y - origin.y);
 			z = anchor.z + (active.z - origin.z);
+			x = baseX * lateralScale;
+			y = baseY * lateralScale;
 		} else {
 			const t = Math.max(0, Math.min(1, playheadRef.current));
 			const N = spline.length - 1;
@@ -455,11 +518,13 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 			const i1 = Math.min(i0 + 1, N);
 			const frac = t * N - i0;
 			const p0 = spline[i0], p1 = spline[i1];
-			x = -(p0.x + (p1.x - p0.x) * frac);
-			y = -(p0.y + (p1.y - p0.y) * frac);
+			const baseX = -(p0.x + (p1.x - p0.x) * frac);
+			const baseY = -(p0.y + (p1.y - p0.y) * frac);
 			z = -(p0.z + (p1.z - p0.z) * frac);
-			activePosRef.current = { x, y, z };
-			if (!originPosRef.current) originPosRef.current = { x, y, z };
+			x = baseX * lateralScale;
+			y = baseY * lateralScale;
+			activePosRef.current = { x: baseX, y: baseY, z };
+			if (!originPosRef.current) originPosRef.current = { x: baseX, y: baseY, z };
 			if (crossfadeWorldPosRef) {
 				crossfadeWorldPosRef.current = {
 					x: crossfadeCenterLocal.x + x,
@@ -501,9 +566,9 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 	);
 }
 
-export function RoadMesh({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef }) {
+export function RoadMesh({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef }) {
 	if (cfg.waveformUrl) {
-		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} />;
+		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} />;
 	}
-	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} />;
+	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} />;
 }

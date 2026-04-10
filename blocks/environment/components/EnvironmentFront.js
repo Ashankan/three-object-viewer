@@ -932,6 +932,7 @@ export default function EnvironmentFront(props) {
 	const [loaded, setLoaded] = useState(false);
 	const [spawnPoints, setSpawnPoints] = useState([0, 0, 0]);
 	const roadPlayheadRef = useRef(0);
+	const curvatureScaleRef = useRef(1.0);
 	const prevMapPostIdRef = useRef(null);
 	const rolesRef = useRef({ active: 'A', previous: null, next: null });
 	const pendingTransitionRef = useRef(null); // { wasActive } — set by onSongChange, consumed by fetchRoadCfg .then()
@@ -1355,6 +1356,10 @@ export default function EnvironmentFront(props) {
 
 		let raf;
 		let lastValidDuration = 0;
+		// Curvature fade state — after pause, continue decrementing at the same
+		// per-frame step the jog ramp was using, so the momentum carries through.
+		let _prevRawRate = 1.0;
+		let _curvStep    = 0;    // magnitude of rate change observed last jog frame
 		function tick() {
 			const player = window.MediaBarPlayer;
 			if (player) {
@@ -1368,6 +1373,18 @@ export default function EnvironmentFront(props) {
 					const effectiveDur = (isFinite(dur) && dur > 0) ? dur : lastValidDuration;
 					if (isFinite(dur) && dur > 0) lastValidDuration = dur;
 					if (effectiveDur > 0) roadPlayheadRef.current = ct / effectiveDur;
+				}
+				const rawRate = player.getCurrentPlaybackRate?.() ?? 1.0;
+				if (rawRate > 0) {
+					// Track per-frame step magnitude while jog ramp is running.
+					_curvStep    = Math.abs(rawRate - _prevRawRate);
+					_prevRawRate = rawRate;
+					curvatureScaleRef.current = rawRate;
+				} else {
+					// Paused — continue at the same step the jog was using.
+					// Fallback covers direct pause (no jog ramp).
+					const step = _curvStep > 0 ? _curvStep : 0.007;
+					curvatureScaleRef.current = Math.max(0, curvatureScaleRef.current - step);
 				}
 			}
 			raf = requestAnimationFrame(tick);
@@ -1444,6 +1461,7 @@ export default function EnvironmentFront(props) {
 								pushed={getSlotLayer('A')}
 								splineExportRef={slotASplineRef}
 								morphFromRef={slotAMorphFromRef}
+								curvatureScaleRef={curvatureScaleRef}
 								/>
 								</Suspense>
 								)}
@@ -1464,6 +1482,7 @@ export default function EnvironmentFront(props) {
 								pushed={getSlotLayer('B')}
 								splineExportRef={slotBSplineRef}
 								morphFromRef={slotBMorphFromRef}
+								curvatureScaleRef={curvatureScaleRef}
 								/>
 								</Suspense>
 								)}
@@ -1484,6 +1503,7 @@ export default function EnvironmentFront(props) {
 								pushed={getSlotLayer('C')}
 								splineExportRef={slotCSplineRef}
 								morphFromRef={slotCMorphFromRef}
+								curvatureScaleRef={curvatureScaleRef}
 								/>
 								</Suspense>
 								)}
