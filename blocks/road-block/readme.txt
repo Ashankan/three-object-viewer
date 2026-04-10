@@ -1,14 +1,16 @@
 == Next to do ==
 
+Need to fix settings from editor-block being passed, road width can't be set.
+_ 
 Need to add start of track/map marking overlay that blends road stitching with an overlay.
-
-_
-
-Set up mesh-warp to affect all layers for the road, both current and for future overlays and objects that may be added.
-Outlines for road does currently not follow the morph.
+The goal is to make it possible to let track-meta data or something else for that matter style it.
+It would be 
 
 
 == Done in previous edit ==
+_ 
+Outlines for road  follow the morph.
+Set up mesh-warp to affect all layers for the road, both current and for future overlays and objects that may be added.
 _ 
 warpipng from no playback to full playback:
 no playback (0) = straight road, full playback(1) full curvature of road-mesh, driven/animated by addition of playback speed.

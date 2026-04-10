@@ -145,25 +145,69 @@ function buildCurvatureMorphPositions(cfg) {
 	return new Float32Array(geo.attributes.position.array);
 }
 
-function buildCrossfadeLineGeo(geo, markerIdx) {
+function buildCrossfadeLineGeo(geo, straightPositions, markerIdx) {
 	const pos = geo.attributes.position;
 	const i = markerIdx;
-	const L = new THREE.Vector3(pos.getX(i*2),   pos.getY(i*2)   + 0.04, pos.getZ(i*2));
-	const R = new THREE.Vector3(pos.getX(i*2+1), pos.getY(i*2+1) + 0.04, pos.getZ(i*2+1));
-	return new THREE.BufferGeometry().setFromPoints([L, R]);
+	const b = i * 6;
+	// Base (curved) positions
+	const bLx = pos.getX(i*2),   bLy = pos.getY(i*2)   + 0.04, bLz = pos.getZ(i*2);
+	const bRx = pos.getX(i*2+1), bRy = pos.getY(i*2+1) + 0.04, bRz = pos.getZ(i*2+1);
+	// Straight positions (for curvature morph CPU lerp)
+	const sLx = straightPositions[b],   sLy = straightPositions[b+1] + 0.04, sLz = straightPositions[b+2];
+	const sRx = straightPositions[b+3], sRy = straightPositions[b+4] + 0.04, sRz = straightPositions[b+5];
+	const lineGeo = new THREE.BufferGeometry().setFromPoints([
+		new THREE.Vector3(bLx, bLy, bLz),
+		new THREE.Vector3(bRx, bRy, bRz),
+	]);
+	return {
+		geo: lineGeo,
+		baseL:     [bLx, bLy, bLz], baseR:     [bRx, bRy, bRz],
+		straightL: [sLx, sLy, sLz], straightR: [sRx, sRy, sRz],
+	};
 }
 
-function buildEdgeGeos(geo, N) {
+function buildEdgeGeos(geo, straightPositions, N, transitionFromPos) {
 	const pos = geo.attributes.position;
 	const L = [], R = [];
 	for (let i = 0; i <= N; i++) {
 		L.push(new THREE.Vector3(pos.getX(i*2),   pos.getY(i*2)   + 0.02, pos.getZ(i*2)));
 		R.push(new THREE.Vector3(pos.getX(i*2+1), pos.getY(i*2+1) + 0.02, pos.getZ(i*2+1)));
 	}
-	return {
-		leftGeo:  new THREE.BufferGeometry().setFromPoints(L),
-		rightGeo: new THREE.BufferGeometry().setFromPoints(R),
-	};
+	const leftGeo  = new THREE.BufferGeometry().setFromPoints(L);
+	const rightGeo = new THREE.BufferGeometry().setFromPoints(R);
+
+	// Straight-road positions for curvature morph (slot 0) CPU lerp.
+	const leftBase      = new Float32Array(leftGeo.attributes.position.array);
+	const rightBase     = new Float32Array(rightGeo.attributes.position.array);
+	const leftStraight  = new Float32Array((N + 1) * 3);
+	const rightStraight = new Float32Array((N + 1) * 3);
+	for (let i = 0; i <= N; i++) {
+		const b = i * 6;
+		leftStraight[i*3]   = straightPositions[b];
+		leftStraight[i*3+1] = straightPositions[b+1] + 0.02;
+		leftStraight[i*3+2] = straightPositions[b+2];
+		rightStraight[i*3]   = straightPositions[b+3];
+		rightStraight[i*3+1] = straightPositions[b+4] + 0.02;
+		rightStraight[i*3+2] = straightPositions[b+5];
+	}
+
+	// Old-road edge positions for transition morph (slot 1) CPU lerp.
+	let leftMorphFrom = null, rightMorphFrom = null;
+	if (transitionFromPos) {
+		leftMorphFrom  = new Float32Array((N + 1) * 3);
+		rightMorphFrom = new Float32Array((N + 1) * 3);
+		for (let i = 0; i <= N; i++) {
+			const b = i * 6;
+			leftMorphFrom[i*3]   = transitionFromPos[b];
+			leftMorphFrom[i*3+1] = transitionFromPos[b+1] + 0.02;
+			leftMorphFrom[i*3+2] = transitionFromPos[b+2];
+			rightMorphFrom[i*3]   = transitionFromPos[b+3];
+			rightMorphFrom[i*3+1] = transitionFromPos[b+4] + 0.02;
+			rightMorphFrom[i*3+2] = transitionFromPos[b+5];
+		}
+	}
+
+	return { leftGeo, rightGeo, leftBase, rightBase, leftStraight, rightStraight, leftMorphFrom, rightMorphFrom };
 }
 
 function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef }) {
@@ -175,7 +219,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 	const morphActiveRef  = useRef(false);
 	const morphXfSecsRef  = useRef(0);
 
-	const { geo, spline, hasMorph, morphXfSecs } = useMemo(() => {
+	const { geo, spline, hasMorph, morphXfSecs, transitionFromPos } = useMemo(() => {
 		const result = buildGeometry(cfg);
 
 		if (splineExportRef) splineExportRef.current = result.spline;
@@ -192,11 +236,11 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 			const fromPos = buildMorphPositions(mf.spline, mf.playheadIdx, result.spline, halfWidth);
 			// Slot 1: transition morph (old road absolute positions).
 			result.geo.morphAttributes.position.push(new THREE.BufferAttribute(fromPos, 3));
-			return { ...result, morphXfSecs: mf.xfSecs, hasMorph: true };
+			return { ...result, morphXfSecs: mf.xfSecs, hasMorph: true, transitionFromPos: fromPos };
 		}
-		return { ...result, morphXfSecs: 0, hasMorph: false };
+		return { ...result, morphXfSecs: 0, hasMorph: false, transitionFromPos: null };
 	}, [cfg]);
-	const edgeGeos = useMemo(() => buildEdgeGeos(geo, cfg.segments || 160), [geo]);
+	const edgeGeos = useMemo(() => buildEdgeGeos(geo, buildCurvatureMorphPositions(cfg), cfg.segments || 160, transitionFromPos), [geo]); // eslint-disable-line react-hooks/exhaustive-deps
 	const markerIdx = useMemo(() => {
 		const N = cfg.segments || 160;
 		const playerDur = window.MediaBarPlayer?.getDuration();
@@ -204,16 +248,23 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 		const xfSecs = window.MediaBarConfig?.globalCrossfade ?? 2.0;
 		return Math.max(0, Math.round((1 - xfSecs / dur) * N));
 	}, [cfg]);
-	const crossfadeLineGeo = useMemo(() => buildCrossfadeLineGeo(geo, markerIdx), [geo, markerIdx]);
+	const crossfadeLineData = useMemo(() => buildCrossfadeLineGeo(geo, buildCurvatureMorphPositions(cfg), markerIdx), [geo, markerIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 	const crossfadeCenterLocal = useMemo(() => {
 		const pos = geo.attributes.position;
 		const i = markerIdx;
+		const straight = buildCurvatureMorphPositions(cfg);
+		const b = i * 6;
 		return {
-			x: (pos.getX(i*2) + pos.getX(i*2+1)) / 2,
-			y: (pos.getY(i*2) + pos.getY(i*2+1)) / 2,
-			z: (pos.getZ(i*2) + pos.getZ(i*2+1)) / 2,
+			// base (curved)
+			bx: (pos.getX(i*2) + pos.getX(i*2+1)) / 2,
+			by: (pos.getY(i*2) + pos.getY(i*2+1)) / 2,
+			bz: (pos.getZ(i*2) + pos.getZ(i*2+1)) / 2,
+			// straight (curvature-morphed)
+			sx: (straight[b]   + straight[b+3]) / 2,
+			sy: (straight[b+1] + straight[b+4]) / 2,
+			sz: (straight[b+2] + straight[b+5]) / 2,
 		};
-	}, [geo, markerIdx]);
+	}, [geo, markerIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 	const crossfadeHeadingLocal = useMemo(() => {
 		const N = spline.length - 1;
 		const nxt = spline[Math.min(markerIdx + 1, N)];
@@ -276,7 +327,60 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 			roadRef.current.morphTargetInfluences[0] = curvInfl;
 		}
 
-		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.visible = !frozenRef.current;
+		if (crossfadeMarkerRef.current) {
+			crossfadeMarkerRef.current.visible = !frozenRef.current;
+			// CPU lerp crossfade marker to follow curvature morph.
+			if (curvInfl !== 0) {
+				const mp = crossfadeLineData.geo.attributes.position;
+				const { baseL, baseR, straightL, straightR } = crossfadeLineData;
+				mp.array[0] = baseL[0] + (straightL[0] - baseL[0]) * curvInfl;
+				mp.array[1] = baseL[1] + (straightL[1] - baseL[1]) * curvInfl;
+				mp.array[2] = baseL[2] + (straightL[2] - baseL[2]) * curvInfl;
+				mp.array[3] = baseR[0] + (straightR[0] - baseR[0]) * curvInfl;
+				mp.array[4] = baseR[1] + (straightR[1] - baseR[1]) * curvInfl;
+				mp.array[5] = baseR[2] + (straightR[2] - baseR[2]) * curvInfl;
+				mp.needsUpdate = true;
+			}
+		}
+
+		// CPU lerp edge lines for both morphs (LineBasicMaterial has no GPU morph support).
+		// Always runs so positions reset correctly when influences return to 0.
+		// Slot 0 (curvature): lerp base → straight by curvInfl.
+		// Slot 1 (transition): lerp curvature-result → morphFrom by morphTargetInfluences[1].
+		{
+			const transInfl = (morphActiveRef.current && edgeGeos.leftMorphFrom)
+				? (roadRef.current?.morphTargetInfluences?.[1] ?? 0)
+				: 0;
+			const lp = edgeGeos.leftGeo.attributes.position;
+			const rp = edgeGeos.rightGeo.attributes.position;
+			const lb = edgeGeos.leftBase,      ls = edgeGeos.leftStraight;
+			const rb = edgeGeos.rightBase,     rs = edgeGeos.rightStraight;
+			const lf = edgeGeos.leftMorphFrom, rf = edgeGeos.rightMorphFrom;
+			const n = lp.count;
+			for (let i = 0; i < n; i++) {
+				const b = i * 3;
+				// Step 1: curvature lerp (base → straight)
+				let lx = lb[b]   + (ls[b]   - lb[b])   * curvInfl;
+				let ly = lb[b+1] + (ls[b+1] - lb[b+1]) * curvInfl;
+				let lz = lb[b+2] + (ls[b+2] - lb[b+2]) * curvInfl;
+				let rx = rb[b]   + (rs[b]   - rb[b])   * curvInfl;
+				let ry = rb[b+1] + (rs[b+1] - rb[b+1]) * curvInfl;
+				let rz = rb[b+2] + (rs[b+2] - rb[b+2]) * curvInfl;
+				// Step 2: transition lerp (curvature result → old road)
+				if (transInfl !== 0 && lf && rf) {
+					lx += (lf[b]   - lx) * transInfl;
+					ly += (lf[b+1] - ly) * transInfl;
+					lz += (lf[b+2] - lz) * transInfl;
+					rx += (rf[b]   - rx) * transInfl;
+					ry += (rf[b+1] - ry) * transInfl;
+					rz += (rf[b+2] - rz) * transInfl;
+				}
+				lp.array[b] = lx; lp.array[b+1] = ly; lp.array[b+2] = lz;
+				rp.array[b] = rx; rp.array[b+1] = ry; rp.array[b+2] = rz;
+			}
+			lp.needsUpdate = true;
+			rp.needsUpdate = true;
+		}
 
 		// Clip previous-slot geometry — before any early return so it always fires.
 		if (frozenAsPrevRef?.current) {
@@ -325,10 +429,13 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 			activePosRef.current = { x: baseX, y: baseY, z };
 			if (!originPosRef.current) originPosRef.current = { x: baseX, y: baseY, z };
 			if (crossfadeWorldPosRef) {
+				// Use morphed marker center so the next slot's anchor is correct.
+				const mcx = crossfadeCenterLocal.bx + (crossfadeCenterLocal.sx - crossfadeCenterLocal.bx) * curvInfl;
+				const mcy = crossfadeCenterLocal.by + (crossfadeCenterLocal.sy - crossfadeCenterLocal.by) * curvInfl;
 				crossfadeWorldPosRef.current = {
-					x: crossfadeCenterLocal.x + x,
-					y: crossfadeCenterLocal.y + y,
-					z: crossfadeCenterLocal.z + z,
+					x: mcx * lateralScale + x,
+					y: mcy * lateralScale + y,
+					z: crossfadeCenterLocal.bz + z,
 				};
 			}
 			if (crossfadeHeadingRef) {
@@ -358,7 +465,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 			<line ref={rightRef} geometry={edgeGeos.rightGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
 			</line>
-			<line ref={crossfadeMarkerRef} geometry={crossfadeLineGeo} renderOrder={1}>
+			<line ref={crossfadeMarkerRef} geometry={crossfadeLineData.geo} renderOrder={1}>
 				<lineBasicMaterial color={0xffff00} depthTest={false} />
 			</line>
 		</>
@@ -400,7 +507,7 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 	const morphXfSecsRef  = useRef(0);
 	const texture  = useMemo(() => makeProceduralTex(), []);
 
-	const { geo, spline, hasMorph, morphXfSecs } = useMemo(() => {
+	const { geo, spline, hasMorph, morphXfSecs, transitionFromPos } = useMemo(() => {
 		const result = buildGeometry(cfg);
 
 		if (splineExportRef) splineExportRef.current = result.spline;
@@ -416,11 +523,11 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 			const fromPos = buildMorphPositions(mf.spline, mf.playheadIdx, result.spline, halfWidth);
 			// Slot 1: transition morph (old road absolute positions).
 			result.geo.morphAttributes.position.push(new THREE.BufferAttribute(fromPos, 3));
-			return { ...result, morphXfSecs: mf.xfSecs, hasMorph: true };
+			return { ...result, morphXfSecs: mf.xfSecs, hasMorph: true, transitionFromPos: fromPos };
 		}
-		return { ...result, morphXfSecs: 0, hasMorph: false };
+		return { ...result, morphXfSecs: 0, hasMorph: false, transitionFromPos: null };
 	}, [cfg]);
-	const edgeGeos = useMemo(() => buildEdgeGeos(geo, cfg.segments || 160), [geo]);
+	const edgeGeos = useMemo(() => buildEdgeGeos(geo, buildCurvatureMorphPositions(cfg), cfg.segments || 160, transitionFromPos), [geo]); // eslint-disable-line react-hooks/exhaustive-deps
 	const markerIdx = useMemo(() => {
 		const N = cfg.segments || 160;
 		const playerDur = window.MediaBarPlayer?.getDuration();
@@ -428,16 +535,23 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 		const xfSecs = window.MediaBarConfig?.globalCrossfade ?? 2.0;
 		return Math.max(0, Math.round((1 - xfSecs / dur) * N));
 	}, [cfg]);
-	const crossfadeLineGeo = useMemo(() => buildCrossfadeLineGeo(geo, markerIdx), [geo, markerIdx]);
+	const crossfadeLineData = useMemo(() => buildCrossfadeLineGeo(geo, buildCurvatureMorphPositions(cfg), markerIdx), [geo, markerIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 	const crossfadeCenterLocal = useMemo(() => {
 		const pos = geo.attributes.position;
 		const i = markerIdx;
+		const straight = buildCurvatureMorphPositions(cfg);
+		const b = i * 6;
 		return {
-			x: (pos.getX(i*2) + pos.getX(i*2+1)) / 2,
-			y: (pos.getY(i*2) + pos.getY(i*2+1)) / 2,
-			z: (pos.getZ(i*2) + pos.getZ(i*2+1)) / 2,
+			// base (curved)
+			bx: (pos.getX(i*2) + pos.getX(i*2+1)) / 2,
+			by: (pos.getY(i*2) + pos.getY(i*2+1)) / 2,
+			bz: (pos.getZ(i*2) + pos.getZ(i*2+1)) / 2,
+			// straight (curvature-morphed)
+			sx: (straight[b]   + straight[b+3]) / 2,
+			sy: (straight[b+1] + straight[b+4]) / 2,
+			sz: (straight[b+2] + straight[b+5]) / 2,
 		};
-	}, [geo, markerIdx]);
+	}, [geo, markerIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 	const crossfadeHeadingLocal = useMemo(() => {
 		const N = spline.length - 1;
 		const nxt = spline[Math.min(markerIdx + 1, N)];
@@ -481,7 +595,60 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 			roadRef.current.morphTargetInfluences[0] = curvInfl;
 		}
 
-		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.visible = !frozenRef.current;
+		if (crossfadeMarkerRef.current) {
+			crossfadeMarkerRef.current.visible = !frozenRef.current;
+			// CPU lerp crossfade marker to follow curvature morph.
+			if (curvInfl !== 0) {
+				const mp = crossfadeLineData.geo.attributes.position;
+				const { baseL, baseR, straightL, straightR } = crossfadeLineData;
+				mp.array[0] = baseL[0] + (straightL[0] - baseL[0]) * curvInfl;
+				mp.array[1] = baseL[1] + (straightL[1] - baseL[1]) * curvInfl;
+				mp.array[2] = baseL[2] + (straightL[2] - baseL[2]) * curvInfl;
+				mp.array[3] = baseR[0] + (straightR[0] - baseR[0]) * curvInfl;
+				mp.array[4] = baseR[1] + (straightR[1] - baseR[1]) * curvInfl;
+				mp.array[5] = baseR[2] + (straightR[2] - baseR[2]) * curvInfl;
+				mp.needsUpdate = true;
+			}
+		}
+
+		// CPU lerp edge lines for both morphs (LineBasicMaterial has no GPU morph support).
+		// Always runs so positions reset correctly when influences return to 0.
+		// Slot 0 (curvature): lerp base → straight by curvInfl.
+		// Slot 1 (transition): lerp curvature-result → morphFrom by morphTargetInfluences[1].
+		{
+			const transInfl = (morphActiveRef.current && edgeGeos.leftMorphFrom)
+				? (roadRef.current?.morphTargetInfluences?.[1] ?? 0)
+				: 0;
+			const lp = edgeGeos.leftGeo.attributes.position;
+			const rp = edgeGeos.rightGeo.attributes.position;
+			const lb = edgeGeos.leftBase,      ls = edgeGeos.leftStraight;
+			const rb = edgeGeos.rightBase,     rs = edgeGeos.rightStraight;
+			const lf = edgeGeos.leftMorphFrom, rf = edgeGeos.rightMorphFrom;
+			const n = lp.count;
+			for (let i = 0; i < n; i++) {
+				const b = i * 3;
+				// Step 1: curvature lerp (base → straight)
+				let lx = lb[b]   + (ls[b]   - lb[b])   * curvInfl;
+				let ly = lb[b+1] + (ls[b+1] - lb[b+1]) * curvInfl;
+				let lz = lb[b+2] + (ls[b+2] - lb[b+2]) * curvInfl;
+				let rx = rb[b]   + (rs[b]   - rb[b])   * curvInfl;
+				let ry = rb[b+1] + (rs[b+1] - rb[b+1]) * curvInfl;
+				let rz = rb[b+2] + (rs[b+2] - rb[b+2]) * curvInfl;
+				// Step 2: transition lerp (curvature result → old road)
+				if (transInfl !== 0 && lf && rf) {
+					lx += (lf[b]   - lx) * transInfl;
+					ly += (lf[b+1] - ly) * transInfl;
+					lz += (lf[b+2] - lz) * transInfl;
+					rx += (rf[b]   - rx) * transInfl;
+					ry += (rf[b+1] - ry) * transInfl;
+					rz += (rf[b+2] - rz) * transInfl;
+				}
+				lp.array[b] = lx; lp.array[b+1] = ly; lp.array[b+2] = lz;
+				rp.array[b] = rx; rp.array[b+1] = ry; rp.array[b+2] = rz;
+			}
+			lp.needsUpdate = true;
+			rp.needsUpdate = true;
+		}
 
 		// Clip previous-slot geometry — before any early return so it always fires.
 		if (frozenAsPrevRef?.current) {
@@ -526,10 +693,13 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 			activePosRef.current = { x: baseX, y: baseY, z };
 			if (!originPosRef.current) originPosRef.current = { x: baseX, y: baseY, z };
 			if (crossfadeWorldPosRef) {
+				// Use morphed marker center so the next slot's anchor is correct.
+				const mcx = crossfadeCenterLocal.bx + (crossfadeCenterLocal.sx - crossfadeCenterLocal.bx) * curvInfl;
+				const mcy = crossfadeCenterLocal.by + (crossfadeCenterLocal.sy - crossfadeCenterLocal.by) * curvInfl;
 				crossfadeWorldPosRef.current = {
-					x: crossfadeCenterLocal.x + x,
-					y: crossfadeCenterLocal.y + y,
-					z: crossfadeCenterLocal.z + z,
+					x: mcx * lateralScale + x,
+					y: mcy * lateralScale + y,
+					z: crossfadeCenterLocal.bz + z,
 				};
 			}
 			if (crossfadeHeadingRef) {
@@ -559,7 +729,7 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 			<line ref={rightRef} geometry={edgeGeos.rightGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
 			</line>
-			<line ref={crossfadeMarkerRef} geometry={crossfadeLineGeo} renderOrder={1}>
+			<line ref={crossfadeMarkerRef} geometry={crossfadeLineData.geo} renderOrder={1}>
 				<lineBasicMaterial color={0xffff00} depthTest={false} />
 			</line>
 		</>

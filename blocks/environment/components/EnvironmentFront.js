@@ -1288,6 +1288,9 @@ export default function EnvironmentFront(props) {
 					};
 
 					// Package old spline as morph-from data for new active slot.
+					// Skip when the playhead is near the end — almost no old road remains
+					// ahead, so buildMorphPositions collapses all new vertices onto the last
+					// 1-2 old points and produces a zoom-from-behind artifact.
 					const oldSpline = getSlotSplineRef(wasActive).current;
 					if (oldSpline && oldSpline.length > 1) {
 						const _xfSecs2 = window.MediaBarConfig?.globalCrossfade ?? 2.0;
@@ -1295,11 +1298,13 @@ export default function EnvironmentFront(props) {
 							Math.floor(roadPlayheadRef.current * (oldSpline.length - 1)),
 							oldSpline.length - 2
 						);
-						getSlotMorphFromRef(newActive).current = {
+						const oldFrontLen = (oldSpline.length - 1) - phIdx;
+						const enoughOldRoad = oldFrontLen > (oldSpline.length - 1) * 0.15;
+						getSlotMorphFromRef(newActive).current = enoughOldRoad ? {
 							spline: oldSpline,
 							playheadIdx: phIdx,
 							xfSecs: _xfSecs2,
-						};
+						} : null;
 					} else {
 						getSlotMorphFromRef(newActive).current = null;
 					}
@@ -1381,8 +1386,7 @@ export default function EnvironmentFront(props) {
 					_prevRawRate = rawRate;
 					curvatureScaleRef.current = rawRate;
 				} else {
-					// Paused — continue at the same step the jog was using.
-					// Fallback covers direct pause (no jog ramp).
+					// Paused after a jog ramp — continue fading at the same per-frame step.
 					const step = _curvStep > 0 ? _curvStep : 0.007;
 					curvatureScaleRef.current = Math.max(0, curvatureScaleRef.current - step);
 				}
