@@ -967,6 +967,16 @@ export default function EnvironmentFront(props) {
 	const slotBOriginRef = useRef(null);
 	const slotCOriginRef = useRef(null);
 
+	// Per-slot spline export refs — RoadMesh writes its live spline here on every rebuild.
+	const slotASplineRef = useRef(null);
+	const slotBSplineRef = useRef(null);
+	const slotCSplineRef = useRef(null);
+
+	// Per-slot morphFrom refs — populated at transition, consumed by new active RoadMesh.
+	const slotAMorphFromRef = useRef(null);
+	const slotBMorphFromRef = useRef(null);
+	const slotCMorphFromRef = useRef(null);
+
 	// Shared refs (active slot writes, frozen slots read)
 	const activePosRef   = useRef({ x: 0, y: 0, z: 0 });
 	const crossfadeWorldPosRef = useRef({ x: 0, y: 0, z: 0 });
@@ -1007,6 +1017,16 @@ export default function EnvironmentFront(props) {
 		if (slot === 'A') return slotAOriginRef;
 		if (slot === 'B') return slotBOriginRef;
 		return slotCOriginRef;
+	}
+	function getSlotSplineRef(slot) {
+		if (slot === 'A') return slotASplineRef;
+		if (slot === 'B') return slotBSplineRef;
+		return slotCSplineRef;
+	}
+	function getSlotMorphFromRef(slot) {
+		if (slot === 'A') return slotAMorphFromRef;
+		if (slot === 'B') return slotBMorphFromRef;
+		return slotCMorphFromRef;
 	}
 	// Returns polygon offset layer: next=above(−1), active=0, previous=below(+1)
 	function getSlotLayer(slot) {
@@ -1238,6 +1258,8 @@ export default function EnvironmentFront(props) {
 						getSlotFrozenAsPrevRef(wasPrevious).current = false;
 						getSlotAnchorRef(wasPrevious).current = null;
 						getSlotOriginRef(wasPrevious).current = null;
+						getSlotSplineRef(wasPrevious).current = null;
+						getSlotMorphFromRef(wasPrevious).current = null;
 					}
 
 					const recycledSlot = ['A','B','C'].find(s => s !== newActive && s !== wasActive) || null;
@@ -1263,6 +1285,24 @@ export default function EnvironmentFront(props) {
 						previous: wasActive,
 						next: recycledSlot,
 					};
+
+					// Package old spline as morph-from data for new active slot.
+					const oldSpline = getSlotSplineRef(wasActive).current;
+					if (oldSpline && oldSpline.length > 1) {
+						const _xfSecs2 = window.MediaBarConfig?.globalCrossfade ?? 2.0;
+						const phIdx = Math.min(
+							Math.floor(roadPlayheadRef.current * (oldSpline.length - 1)),
+							oldSpline.length - 2
+						);
+						getSlotMorphFromRef(newActive).current = {
+							spline: oldSpline,
+							playheadIdx: phIdx,
+							xfSecs: _xfSecs2,
+						};
+					} else {
+						getSlotMorphFromRef(newActive).current = null;
+					}
+					getSlotMorphFromRef(wasActive).current = null;
 				}
 
 				// Unfreeze and set cfg on new active
@@ -1402,6 +1442,8 @@ export default function EnvironmentFront(props) {
 								crossfadeHeadingRef={crossfadeHeadingRef}
 								currentHeadingRef={currentHeadingRef}
 								pushed={getSlotLayer('A')}
+								splineExportRef={slotASplineRef}
+								morphFromRef={slotAMorphFromRef}
 								/>
 								</Suspense>
 								)}
@@ -1420,6 +1462,8 @@ export default function EnvironmentFront(props) {
 								crossfadeHeadingRef={crossfadeHeadingRef}
 								currentHeadingRef={currentHeadingRef}
 								pushed={getSlotLayer('B')}
+								splineExportRef={slotBSplineRef}
+								morphFromRef={slotBMorphFromRef}
 								/>
 								</Suspense>
 								)}
@@ -1438,6 +1482,8 @@ export default function EnvironmentFront(props) {
 								crossfadeHeadingRef={crossfadeHeadingRef}
 								currentHeadingRef={currentHeadingRef}
 								pushed={getSlotLayer('C')}
+								splineExportRef={slotCSplineRef}
+								morphFromRef={slotCMorphFromRef}
 								/>
 								</Suspense>
 								)}

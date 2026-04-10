@@ -1,12 +1,21 @@
 == Next to do ==
 
-Check if audio units are used to calculate mesh length, crossfade marker, and previous map offset.
-_
-A mesh morph function for the maps also to warp from current to next when skipping.
-warpipng from no playback to full playback: no playback = straight road, full playback full curcature of road-mesh.
+Set up mesh-warp to affect all layers for the road, both current and for future overlays and objects that may be added.
+
+_ 
+warpipng from no playback to full playback:
+no playback (0) = straight road, full playback(1) full curvature of road-mesh, driven/animated by amplitude of playback speed.
 
 
 == Done in previous edit ==
+_ 
+A mesh morph function for when skipping track.
+When skipping track the current map geometry gets shifted to the new map right away.
+When on song change happens we need to store the splines (control points) in front of the playhead (playhead is at world origin, road moves past) before changing map.
+On the new map loaded, the stored control points controls take priority over the control points in the new map for the length that is stored.
+This will make the new map appear in the same geometry as the previous map.
+On song change it will morph the new map from the stored values to its own values with a transition time of the crossfade duration setting (2s).
+This will make a smooth morph transition of the geometry when skipping song.
 _ 
 need to clip geometry in front of playhead/offset of previous map so that it doesn't show parallel to  current map.
 _ 
