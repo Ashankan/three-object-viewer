@@ -15,6 +15,12 @@ const roadDomEl = document.querySelector(
 	".three-object-three-app-road-block"
 );
 const hasRoadBlock = !!document.querySelector('.wp-block-three-object-viewer-road-block');
+const roadGeom = roadDomEl ? {
+	roadWidth:   parseFloat(roadDomEl.querySelector(".road-block-width")?.textContent)   || 2.5,
+	segments:    parseInt(roadDomEl.querySelector(".road-block-segments")?.textContent)  || 160,
+	unitsPerSec: parseFloat(roadDomEl.querySelector(".road-block-ups")?.textContent)     || 8,
+	duration:    parseFloat(roadDomEl.querySelector(".road-block-duration")?.textContent) || 60,
+} : { roadWidth: 2.5, segments: 160, unitsPerSec: 8, duration: 60 };
 const npcsToAdd = document.querySelectorAll(
 	".three-object-three-app-npc-block"
 );
@@ -151,6 +157,7 @@ threeApp.forEach((threeApp) => {
 						previewImage={threePreviewImage}
 						hdr ={hdr ? hdr : ""}
 						roadToAdd={hasRoadBlock ? true : null}
+						roadGeom={roadGeom}
 					/>
 \			</>,
 			threeApp

@@ -1,13 +1,16 @@
 == Next to do ==
 
-Need to fix settings from editor-block being passed, road width can't be set.
+need to make road block preview 3d-map in editor.
+_ 
+Add waveform textures system.
 _ 
 Need to add start of track/map marking overlay that blends road stitching with an overlay.
 The goal is to make it possible to let track-meta data or something else for that matter style it.
-It would be 
 
 
 == Done in previous edit ==
+_ 
+Need to fix settings from editor-block being passed, road width can't be set.
 _ 
 Outlines for road  follow the morph.
 Set up mesh-warp to affect all layers for the road, both current and for future overlays and objects that may be added.

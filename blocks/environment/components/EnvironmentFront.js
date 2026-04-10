@@ -1109,17 +1109,12 @@ export default function EnvironmentFront(props) {
 					const e = el.querySelector("." + cls);
 					return e ? e.textContent.trim() : "";
 				};
-				const roadBlockEl = document.querySelector(
-					".three-object-three-app-road-block"
-				);
-				const geom = roadBlockEl
-					? {
-							roadWidth: parseFloat(roadBlockEl.querySelector(".road-block-width")?.textContent) || 2.5,
-							segments: parseInt(roadBlockEl.querySelector(".road-block-segments")?.textContent) || 160,
-							unitsPerSec: parseFloat(roadBlockEl.querySelector(".road-block-ups")?.textContent) || 8,
-							duration: parseFloat(roadBlockEl.querySelector(".road-block-duration")?.textContent) || 60
-					  }
-					: { roadWidth: 2.5, segments: 160, unitsPerSec: 8, duration: 60 };
+				const geom = props.roadGeom || {
+					roadWidth: 2.5,
+					segments: 160,
+					unitsPerSec: 8,
+					duration: 60,
+				};
 				const controlPoints = JSON.parse(
 					el.querySelector(".tdm-control-points")?.dataset?.points || "[]"
 				);
@@ -1172,41 +1167,12 @@ export default function EnvironmentFront(props) {
 					const e = el.querySelector("." + cls);
 					return e ? e.textContent.trim() : "";
 				};
-				const roadBlockEl = document.querySelector(
-					".three-object-three-app-road-block"
-				);
-				const geom = roadBlockEl
-					? {
-							roadWidth:
-								parseFloat(
-									roadBlockEl.querySelector(
-										".road-block-width"
-									)?.textContent
-								) || 2.5,
-							segments:
-								parseInt(
-									roadBlockEl.querySelector(
-										".road-block-segments"
-									)?.textContent
-								) || 160,
-							unitsPerSec:
-								parseFloat(
-									roadBlockEl.querySelector(".road-block-ups")
-										?.textContent
-								) || 8,
-							duration:
-								parseFloat(
-									roadBlockEl.querySelector(
-										".road-block-duration"
-									)?.textContent
-								) || 60
-					  }
-					: {
-							roadWidth: 2.5,
-							segments: 160,
-							unitsPerSec: 8,
-							duration: 60
-					  };
+				const geom = props.roadGeom || {
+					roadWidth: 2.5,
+					segments: 160,
+					unitsPerSec: 8,
+					duration: 60,
+				};
 				const activeCfgControlPoints = JSON.parse(
 					el.querySelector(".tdm-control-points")?.dataset
 						?.points || "[]"
