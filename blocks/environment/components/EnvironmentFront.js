@@ -1329,8 +1329,10 @@ export default function EnvironmentFront(props) {
 		let lastValidDuration = 0;
 		// Curvature fade state — after pause, continue decrementing at the same
 		// per-frame step the jog ramp was using, so the momentum carries through.
+		// On resume from pause, ramp up at the same step rate to avoid a snap.
 		let _prevRawRate = 1.0;
 		let _curvStep    = 0;    // magnitude of rate change observed last jog frame
+		let _wasPaused   = false;
 		function tick() {
 			const player = window.MediaBarPlayer;
 			if (player) {
@@ -1347,14 +1349,27 @@ export default function EnvironmentFront(props) {
 				}
 				const rawRate = player.getCurrentPlaybackRate?.() ?? 1.0;
 				if (rawRate > 0) {
-					// Track per-frame step magnitude while jog ramp is running.
-					_curvStep    = Math.abs(rawRate - _prevRawRate);
-					_prevRawRate = rawRate;
-					curvatureScaleRef.current = rawRate;
+					if (_wasPaused) {
+						// Resuming from pause — ramp up at the same per-frame step to avoid a snap.
+						const step = _curvStep > 0 ? _curvStep : 0.007;
+						const next = curvatureScaleRef.current + step;
+						if (next >= rawRate) {
+							curvatureScaleRef.current = rawRate;
+							_wasPaused = false;
+						} else {
+							curvatureScaleRef.current = next;
+						}
+					} else {
+						// Track per-frame step magnitude while jog ramp is running.
+						_curvStep    = Math.abs(rawRate - _prevRawRate);
+						_prevRawRate = rawRate;
+						curvatureScaleRef.current = rawRate;
+					}
 				} else {
 					// Paused after a jog ramp — continue fading at the same per-frame step.
 					const step = _curvStep > 0 ? _curvStep : 0.007;
 					curvatureScaleRef.current = Math.max(0, curvatureScaleRef.current - step);
+					_wasPaused = true;
 				}
 			}
 			raf = requestAnimationFrame(tick);
@@ -1425,6 +1440,7 @@ export default function EnvironmentFront(props) {
 								activePosRef={activePosRef}
 								originPosRef={rolesRef.current.next === 'A' ? slotAOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'A' ? slotAAnchorRef : frozenAnchorRef}
+								liveAnchorRef={rolesRef.current.next === 'A' ? crossfadeWorldPosRef : null}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
 								crossfadeHeadingRef={crossfadeHeadingRef}
 								currentHeadingRef={currentHeadingRef}
@@ -1446,6 +1462,7 @@ export default function EnvironmentFront(props) {
 								activePosRef={activePosRef}
 								originPosRef={rolesRef.current.next === 'B' ? slotBOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'B' ? slotBAnchorRef : frozenAnchorRef}
+								liveAnchorRef={rolesRef.current.next === 'B' ? crossfadeWorldPosRef : null}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
 								crossfadeHeadingRef={crossfadeHeadingRef}
 								currentHeadingRef={currentHeadingRef}
@@ -1467,6 +1484,7 @@ export default function EnvironmentFront(props) {
 								activePosRef={activePosRef}
 								originPosRef={rolesRef.current.next === 'C' ? slotCOriginRef : originPosRef}
 								frozenAnchorRef={rolesRef.current.next === 'C' ? slotCAnchorRef : frozenAnchorRef}
+								liveAnchorRef={rolesRef.current.next === 'C' ? crossfadeWorldPosRef : null}
 								crossfadeWorldPosRef={crossfadeWorldPosRef}
 								crossfadeHeadingRef={crossfadeHeadingRef}
 								currentHeadingRef={currentHeadingRef}

@@ -1,14 +1,18 @@
 == Next to do ==
 
-need to make road block preview 3d-map in editor.
+Try to fix timing issue for ghost splines. Sometimes (very seldom) it doesn't get the ghost spline setting on the stitch between maps, if wrong it usually resets correct on song change.
 _ 
-Add waveform textures system.
+Create "track analysis asset container" for "3D-map-block", Add waveform texture system.
+_ 
+need to make road block preview 3d-map in editor.
 _ 
 Need to add start of track/map marking overlay that blends road stitching with an overlay.
 The goal is to make it possible to let track-meta data or something else for that matter style it.
 
 
 == Done in previous edit ==
+_ 
+need to fix next map attaching to end of current map on skip track morph.
 _ 
 Need to fix settings from editor-block being passed, road width can't be set.
 _ 

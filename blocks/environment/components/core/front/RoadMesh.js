@@ -210,7 +210,7 @@ function buildEdgeGeos(geo, straightPositions, N, transitionFromPos) {
 	return { leftGeo, rightGeo, leftBase, rightBase, leftStraight, rightStraight, leftMorphFrom, rightMorphFrom };
 }
 
-function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef }) {
+function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef, liveAnchorRef }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -272,6 +272,15 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 		const fwd = new THREE.Vector3().subVectors(nxt, prv).normalize();
 		return { x: fwd.x, y: fwd.y, z: fwd.z };
 	}, [spline, markerIdx]);
+	const crossfadeCenterMorphFrom = useMemo(() => {
+		if (!transitionFromPos) return null;
+		const b = markerIdx * 6;
+		return {
+			x: (transitionFromPos[b]   + transitionFromPos[b+3]) / 2,
+			y: (transitionFromPos[b+1] + transitionFromPos[b+4]) / 2,
+			z: (transitionFromPos[b+2] + transitionFromPos[b+5]) / 2,
+		};
+	}, [transitionFromPos, markerIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const [texture, setTexture] = useState(() => makeProceduralTex());
 
@@ -327,21 +336,21 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 			roadRef.current.morphTargetInfluences[0] = curvInfl;
 		}
 
-		if (crossfadeMarkerRef.current) {
-			crossfadeMarkerRef.current.visible = !frozenRef.current;
-			// CPU lerp crossfade marker to follow curvature morph.
-			if (curvInfl !== 0) {
-				const mp = crossfadeLineData.geo.attributes.position;
-				const { baseL, baseR, straightL, straightR } = crossfadeLineData;
-				mp.array[0] = baseL[0] + (straightL[0] - baseL[0]) * curvInfl;
-				mp.array[1] = baseL[1] + (straightL[1] - baseL[1]) * curvInfl;
-				mp.array[2] = baseL[2] + (straightL[2] - baseL[2]) * curvInfl;
-				mp.array[3] = baseR[0] + (straightR[0] - baseR[0]) * curvInfl;
-				mp.array[4] = baseR[1] + (straightR[1] - baseR[1]) * curvInfl;
-				mp.array[5] = baseR[2] + (straightR[2] - baseR[2]) * curvInfl;
-				mp.needsUpdate = true;
-			}
-		}
+		// if (crossfadeMarkerRef.current) {
+		// 	crossfadeMarkerRef.current.visible = !frozenRef.current;
+		// 	// CPU lerp crossfade marker to follow curvature morph.
+		// 	if (curvInfl !== 0) {
+		// 		const mp = crossfadeLineData.geo.attributes.position;
+		// 		const { baseL, baseR, straightL, straightR } = crossfadeLineData;
+		// 		mp.array[0] = baseL[0] + (straightL[0] - baseL[0]) * curvInfl;
+		// 		mp.array[1] = baseL[1] + (straightL[1] - baseL[1]) * curvInfl;
+		// 		mp.array[2] = baseL[2] + (straightL[2] - baseL[2]) * curvInfl;
+		// 		mp.array[3] = baseR[0] + (straightR[0] - baseR[0]) * curvInfl;
+		// 		mp.array[4] = baseR[1] + (straightR[1] - baseR[1]) * curvInfl;
+		// 		mp.array[5] = baseR[2] + (straightR[2] - baseR[2]) * curvInfl;
+		// 		mp.needsUpdate = true;
+		// 	}
+		// }
 
 		// CPU lerp edge lines for both morphs (LineBasicMaterial has no GPU morph support).
 		// Always runs so positions reset correctly when influences return to 0.
@@ -404,15 +413,23 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 
 		let x, y, z;
 		if (frozenRef.current) {
-			const anchor = frozenAnchorRef.current;
-			const origin = originPosRef.current;
-			const active = activePosRef.current;
-			if (!anchor || !origin) return;
-			const baseX = anchor.x + (active.x - origin.x);
-			const baseY = anchor.y + (active.y - origin.y);
-			z = anchor.z + (active.z - origin.z);
-			x = baseX * lateralScale;
-			y = baseY * lateralScale;
+			if (liveAnchorRef?.current) {
+				// Next slot: track morph-aware crossfadeWorldPosRef directly.
+				const live = liveAnchorRef.current;
+				x = live.x;
+				y = live.y;
+				z = live.z;
+			} else {
+				const anchor = frozenAnchorRef.current;
+				const origin = originPosRef.current;
+				const active = activePosRef.current;
+				if (!anchor || !origin) return;
+				const baseX = anchor.x + (active.x - origin.x);
+				const baseY = anchor.y + (active.y - origin.y);
+				z = anchor.z + (active.z - origin.z);
+				x = baseX * lateralScale;
+				y = baseY * lateralScale;
+			}
 		} else {
 			const t = Math.max(0, Math.min(1, playheadRef.current));
 			const N = spline.length - 1;
@@ -429,14 +446,21 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 			activePosRef.current = { x: baseX, y: baseY, z };
 			if (!originPosRef.current) originPosRef.current = { x: baseX, y: baseY, z };
 			if (crossfadeWorldPosRef) {
-				// Use morphed marker center so the next slot's anchor is correct.
+				// Include transition morph (slot 1) so the next slot tracks the morphing end.
 				const mcx = crossfadeCenterLocal.bx + (crossfadeCenterLocal.sx - crossfadeCenterLocal.bx) * curvInfl;
 				const mcy = crossfadeCenterLocal.by + (crossfadeCenterLocal.sy - crossfadeCenterLocal.by) * curvInfl;
-				crossfadeWorldPosRef.current = {
-					x: mcx * lateralScale + x,
-					y: mcy * lateralScale + y,
-					z: crossfadeCenterLocal.bz + z,
-				};
+				let cfx = mcx * lateralScale + x;
+				let cfy = mcy * lateralScale + y;
+				let cfz = crossfadeCenterLocal.bz + z;
+				if (morphActiveRef.current && crossfadeCenterMorphFrom) {
+					const transInfl = roadRef.current?.morphTargetInfluences?.[1] ?? 0;
+					if (transInfl > 0) {
+						cfx += (crossfadeCenterMorphFrom.x * lateralScale + x - cfx) * transInfl;
+						cfy += (crossfadeCenterMorphFrom.y * lateralScale + y - cfy) * transInfl;
+						cfz += (crossfadeCenterMorphFrom.z + z - cfz) * transInfl;
+					}
+				}
+				crossfadeWorldPosRef.current = { x: cfx, y: cfy, z: cfz };
 			}
 			if (crossfadeHeadingRef) {
 				crossfadeHeadingRef.current = { ...crossfadeHeadingLocal };
@@ -451,7 +475,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 		if (roadRef.current)  roadRef.current.position.set(x, y, z);
 		if (leftRef.current)  leftRef.current.position.set(x, y, z);
 		if (rightRef.current) rightRef.current.position.set(x, y, z);
-		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.position.set(x, y, z);
+		// if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.position.set(x, y, z);
 	});
 
 	return (
@@ -465,9 +489,9 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 			<line ref={rightRef} geometry={edgeGeos.rightGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
 			</line>
-			<line ref={crossfadeMarkerRef} geometry={crossfadeLineData.geo} renderOrder={1}>
+			{/* <line ref={crossfadeMarkerRef} geometry={crossfadeLineData.geo} renderOrder={1}>
 				<lineBasicMaterial color={0xffff00} depthTest={false} />
-			</line>
+			</line> */}
 		</>
 	);
 }
@@ -497,7 +521,7 @@ function makeProceduralTex() {
 	return tex;
 }
 
-function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef }) {
+function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef, liveAnchorRef }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -559,6 +583,15 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 		const fwd = new THREE.Vector3().subVectors(nxt, prv).normalize();
 		return { x: fwd.x, y: fwd.y, z: fwd.z };
 	}, [spline, markerIdx]);
+	const crossfadeCenterMorphFrom = useMemo(() => {
+		if (!transitionFromPos) return null;
+		const b = markerIdx * 6;
+		return {
+			x: (transitionFromPos[b]   + transitionFromPos[b+3]) / 2,
+			y: (transitionFromPos[b+1] + transitionFromPos[b+4]) / 2,
+			z: (transitionFromPos[b+2] + transitionFromPos[b+5]) / 2,
+		};
+	}, [transitionFromPos, markerIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	useEffect(() => {
 		morphElapsedRef.current = 0;
@@ -595,21 +628,21 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 			roadRef.current.morphTargetInfluences[0] = curvInfl;
 		}
 
-		if (crossfadeMarkerRef.current) {
-			crossfadeMarkerRef.current.visible = !frozenRef.current;
-			// CPU lerp crossfade marker to follow curvature morph.
-			if (curvInfl !== 0) {
-				const mp = crossfadeLineData.geo.attributes.position;
-				const { baseL, baseR, straightL, straightR } = crossfadeLineData;
-				mp.array[0] = baseL[0] + (straightL[0] - baseL[0]) * curvInfl;
-				mp.array[1] = baseL[1] + (straightL[1] - baseL[1]) * curvInfl;
-				mp.array[2] = baseL[2] + (straightL[2] - baseL[2]) * curvInfl;
-				mp.array[3] = baseR[0] + (straightR[0] - baseR[0]) * curvInfl;
-				mp.array[4] = baseR[1] + (straightR[1] - baseR[1]) * curvInfl;
-				mp.array[5] = baseR[2] + (straightR[2] - baseR[2]) * curvInfl;
-				mp.needsUpdate = true;
-			}
-		}
+		// if (crossfadeMarkerRef.current) {
+		// 	crossfadeMarkerRef.current.visible = !frozenRef.current;
+		// 	// CPU lerp crossfade marker to follow curvature morph.
+		// 	if (curvInfl !== 0) {
+		// 		const mp = crossfadeLineData.geo.attributes.position;
+		// 		const { baseL, baseR, straightL, straightR } = crossfadeLineData;
+		// 		mp.array[0] = baseL[0] + (straightL[0] - baseL[0]) * curvInfl;
+		// 		mp.array[1] = baseL[1] + (straightL[1] - baseL[1]) * curvInfl;
+		// 		mp.array[2] = baseL[2] + (straightL[2] - baseL[2]) * curvInfl;
+		// 		mp.array[3] = baseR[0] + (straightR[0] - baseR[0]) * curvInfl;
+		// 		mp.array[4] = baseR[1] + (straightR[1] - baseR[1]) * curvInfl;
+		// 		mp.array[5] = baseR[2] + (straightR[2] - baseR[2]) * curvInfl;
+		// 		mp.needsUpdate = true;
+		// 	}
+		// }
 
 		// CPU lerp edge lines for both morphs (LineBasicMaterial has no GPU morph support).
 		// Always runs so positions reset correctly when influences return to 0.
@@ -669,15 +702,23 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 
 		let x, y, z;
 		if (frozenRef.current) {
-			const anchor = frozenAnchorRef.current;
-			const origin = originPosRef.current;
-			const active = activePosRef.current;
-			if (!anchor || !origin) return;
-			const baseX = anchor.x + (active.x - origin.x);
-			const baseY = anchor.y + (active.y - origin.y);
-			z = anchor.z + (active.z - origin.z);
-			x = baseX * lateralScale;
-			y = baseY * lateralScale;
+			if (liveAnchorRef?.current) {
+				// Next slot: track morph-aware crossfadeWorldPosRef directly.
+				const live = liveAnchorRef.current;
+				x = live.x;
+				y = live.y;
+				z = live.z;
+			} else {
+				const anchor = frozenAnchorRef.current;
+				const origin = originPosRef.current;
+				const active = activePosRef.current;
+				if (!anchor || !origin) return;
+				const baseX = anchor.x + (active.x - origin.x);
+				const baseY = anchor.y + (active.y - origin.y);
+				z = anchor.z + (active.z - origin.z);
+				x = baseX * lateralScale;
+				y = baseY * lateralScale;
+			}
 		} else {
 			const t = Math.max(0, Math.min(1, playheadRef.current));
 			const N = spline.length - 1;
@@ -693,14 +734,21 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 			activePosRef.current = { x: baseX, y: baseY, z };
 			if (!originPosRef.current) originPosRef.current = { x: baseX, y: baseY, z };
 			if (crossfadeWorldPosRef) {
-				// Use morphed marker center so the next slot's anchor is correct.
+				// Include transition morph (slot 1) so the next slot tracks the morphing end.
 				const mcx = crossfadeCenterLocal.bx + (crossfadeCenterLocal.sx - crossfadeCenterLocal.bx) * curvInfl;
 				const mcy = crossfadeCenterLocal.by + (crossfadeCenterLocal.sy - crossfadeCenterLocal.by) * curvInfl;
-				crossfadeWorldPosRef.current = {
-					x: mcx * lateralScale + x,
-					y: mcy * lateralScale + y,
-					z: crossfadeCenterLocal.bz + z,
-				};
+				let cfx = mcx * lateralScale + x;
+				let cfy = mcy * lateralScale + y;
+				let cfz = crossfadeCenterLocal.bz + z;
+				if (morphActiveRef.current && crossfadeCenterMorphFrom) {
+					const transInfl = roadRef.current?.morphTargetInfluences?.[1] ?? 0;
+					if (transInfl > 0) {
+						cfx += (crossfadeCenterMorphFrom.x * lateralScale + x - cfx) * transInfl;
+						cfy += (crossfadeCenterMorphFrom.y * lateralScale + y - cfy) * transInfl;
+						cfz += (crossfadeCenterMorphFrom.z + z - cfz) * transInfl;
+					}
+				}
+				crossfadeWorldPosRef.current = { x: cfx, y: cfy, z: cfz };
 			}
 			if (crossfadeHeadingRef) {
 				crossfadeHeadingRef.current = { ...crossfadeHeadingLocal };
@@ -715,7 +763,7 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 		if (roadRef.current)  roadRef.current.position.set(x, y, z);
 		if (leftRef.current)  leftRef.current.position.set(x, y, z);
 		if (rightRef.current) rightRef.current.position.set(x, y, z);
-		if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.position.set(x, y, z);
+		// if (crossfadeMarkerRef.current) crossfadeMarkerRef.current.position.set(x, y, z);
 	});
 
 	return (
@@ -729,16 +777,16 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 			<line ref={rightRef} geometry={edgeGeos.rightGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
 			</line>
-			<line ref={crossfadeMarkerRef} geometry={crossfadeLineData.geo} renderOrder={1}>
+			{/* <line ref={crossfadeMarkerRef} geometry={crossfadeLineData.geo} renderOrder={1}>
 				<lineBasicMaterial color={0xffff00} depthTest={false} />
-			</line>
+			</line> */}
 		</>
 	);
 }
 
-export function RoadMesh({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef }) {
+export function RoadMesh({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef, liveAnchorRef }) {
 	if (cfg.waveformUrl) {
-		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} />;
+		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} liveAnchorRef={liveAnchorRef} />;
 	}
-	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} />;
+	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} liveAnchorRef={liveAnchorRef} />;
 }
