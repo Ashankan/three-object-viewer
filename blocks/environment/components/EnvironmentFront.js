@@ -1178,8 +1178,10 @@ export default function EnvironmentFront(props) {
 						?.points || "[]"
 				);
 
-				// If a transition is about to happen, capture heading NOW (old active still writing it)
-				// and compute phantomPrev so the new active map starts at the correct angle.
+				// If a transition is about to happen, compute phantomPrev so the new
+				// active map starts at the correct angle.  Use the frozen snapshot heading
+				// captured atomically at song-change time — the async .then() fires after
+				// the playhead has advanced, so currentHeadingRef would be stale here.
 				const isPendingTransition = pendingTransitionRef.current !== null;
 				let transitionPhantomPrev = null;
 				if (isPendingTransition) {
@@ -1190,7 +1192,7 @@ export default function EnvironmentFront(props) {
 					const w0x = sortedPts[0].x, w0y = sortedPts[0].y || 0, w0z = -sortedPts[0].t * tLen;
 					const w1x = sortedPts[1].x, w1y = sortedPts[1].y || 0, w1z = -sortedPts[1].t * tLen;
 					const seg = Math.sqrt((w1x-w0x)**2 + (w1y-w0y)**2 + (w1z-w0z)**2) || 1;
-					const h = currentHeadingRef.current;
+					const h = pendingTransitionRef.current?.snap?.currentHeading ?? currentHeadingRef.current;
 					transitionPhantomPrev = {
 						x: w1x - 2 * seg * h.x,
 						y: w1y - 2 * seg * h.y,
@@ -1209,6 +1211,11 @@ export default function EnvironmentFront(props) {
 				if (pending) {
 					pendingTransitionRef.current = null;
 					const { wasActive, wasPrevious, wasNext } = pending;
+					// Frozen snapshot captured atomically at song-change time.
+					// Using these instead of live refs prevents stale-value skew from
+					// the async fetch delay (playhead is held constant while pending,
+					// but snapshot makes the intent explicit and future-proof).
+					const snap = pending.snap ?? null;
 
 					// Pick new active slot — never same as wasActive
 					let newActive;
@@ -1231,10 +1238,14 @@ export default function EnvironmentFront(props) {
 
 					const recycledSlot = ['A','B','C'].find(s => s !== newActive && s !== wasActive) || null;
 
-					// NOW freeze old active → becomes previous
+					// NOW freeze old active → becomes previous.
+					// Use snapshot values — frozenAnchor and clip index must agree on
+					// the same playhead instant so the seam between previous and active
+					// roads is flush.
+					const _snapPlayhead = snap?.playhead ?? roadPlayheadRef.current;
 					getSlotFrozenRef(wasActive).current = true;
 					getSlotFrozenAsPrevRef(wasActive).current = true;
-					frozenAnchorRef.current = { ...activePosRef.current };
+					frozenAnchorRef.current = snap?.activePos ? { ...snap.activePos } : { ...activePosRef.current };
 					// Clip index: extend by crossfade world length so previous map covers the gap.
 					// Use actual player duration (same as RoadMesh markerIdx) so the segment
 					// fraction matches how roadPlayheadRef is normalised.
@@ -1243,7 +1254,7 @@ export default function EnvironmentFront(props) {
 					const _dur        = (isFinite(_playerDur) && _playerDur > 0) ? _playerDur : (geom.duration || 60);
 					const _xfSecs     = window.MediaBarConfig?.globalCrossfade ?? 2.0;
 					const _xfSegments = Math.round((_xfSecs / _dur) * _N);
-					getSlotClipIndexRef(wasActive).current = Math.min(_N, Math.floor(roadPlayheadRef.current * _N) + _xfSegments);
+					getSlotClipIndexRef(wasActive).current = Math.min(_N, Math.floor(_snapPlayhead * _N) + _xfSegments);
 					originPosRef.current = null;
 
 					// Update roles
@@ -1261,7 +1272,7 @@ export default function EnvironmentFront(props) {
 					if (oldSpline && oldSpline.length > 1) {
 						const _xfSecs2 = window.MediaBarConfig?.globalCrossfade ?? 2.0;
 						const phIdx = Math.min(
-							Math.floor(roadPlayheadRef.current * (oldSpline.length - 1)),
+							Math.floor(_snapPlayhead * (oldSpline.length - 1)),
 							oldSpline.length - 2
 						);
 						const oldFrontLen = (oldSpline.length - 1) - phIdx;
@@ -1313,11 +1324,22 @@ export default function EnvironmentFront(props) {
 			// Don't transition yet — just record intent and start fetching.
 			// The actual freeze/unfreeze/role-update happens in fetchRoadCfg .then()
 			// so the old active keeps driving smoothly until the new cfg is ready.
+			//
+			// Snapshot ALL handoff values atomically on this exact frame so that
+			// fetchRoadCfg.then() — which resolves asynchronously — uses a consistent
+			// set of values from the same instant, not a mix from different frames.
 			pendingTransitionRef.current = {
 				mapPostId,
-				wasActive: rolesRef.current.active,
+				wasActive:   rolesRef.current.active,
 				wasPrevious: rolesRef.current.previous,
-				wasNext: rolesRef.current.next,
+				wasNext:     rolesRef.current.next,
+				snap: {
+					playhead:          roadPlayheadRef.current,
+					activePos:         { ...activePosRef.current },
+					crossfadeWorldPos: { ...crossfadeWorldPosRef.current },
+					crossfadeHeading:  { ...crossfadeHeadingRef.current },
+					currentHeading:    { ...currentHeadingRef.current },
+				},
 			};
 
 			if (mapPostId) {
@@ -1341,11 +1363,11 @@ export default function EnvironmentFront(props) {
 				// Don't update playhead while a transition is pending — the old active
 				// should hold its last position rather than jump to the new track's time=0
 				if (!pendingTransitionRef.current) {
-					const ct = player.getCurrentTime();
-					const dur = player.getDuration();
-					const effectiveDur = (isFinite(dur) && dur > 0) ? dur : lastValidDuration;
-					if (isFinite(dur) && dur > 0) lastValidDuration = dur;
-					if (effectiveDur > 0) roadPlayheadRef.current = ct / effectiveDur;
+				const ct = player.getCurrentTime();
+				const dur = player.getDuration();
+				const effectiveDur = (isFinite(dur) && dur > 0) ? dur : lastValidDuration;
+				if (isFinite(dur) && dur > 0) lastValidDuration = dur;
+				if (effectiveDur > 0) roadPlayheadRef.current = ct / effectiveDur;
 				}
 				const rawRate = player.getCurrentPlaybackRate?.() ?? 1.0;
 				if (rawRate > 0) {

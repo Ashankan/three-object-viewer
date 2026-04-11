@@ -215,9 +215,10 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 	const leftRef  = useRef();
 	const rightRef = useRef();
 	const crossfadeMarkerRef = useRef();
-	const morphElapsedRef = useRef(0);
-	const morphActiveRef  = useRef(false);
-	const morphXfSecsRef  = useRef(0);
+	const morphElapsedRef        = useRef(0);
+	const morphActiveRef         = useRef(false);
+	const morphXfSecsRef         = useRef(0);
+	const morphStartAudioTimeRef = useRef(0);
 
 	const { geo, spline, hasMorph, morphXfSecs, transitionFromPos } = useMemo(() => {
 		const result = buildGeometry(cfg);
@@ -301,6 +302,9 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 
 	useEffect(() => {
 		morphElapsedRef.current = 0;
+		// Seed the audio-time baseline so the morph progress is locked to the
+		// player clock from the first frame of the new active mesh.
+		morphStartAudioTimeRef.current = window.MediaBarPlayer?.getCurrentTime?.() ?? 0;
 		morphXfSecsRef.current = hasMorph ? morphXfSecs : 0;
 		morphActiveRef.current = hasMorph;
 		if (roadRef.current) {
@@ -317,9 +321,21 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 
 	useFrame((_, delta) => {
 		// Transition morph — slot 1, fades old road → new road.
+		// Progress is driven by the audio clock so it stays locked to playback
+		// speed and freezes correctly when the player is paused.
+		// Falls back to delta accumulation if MediaBarPlayer is unavailable.
 		if (morphActiveRef.current && roadRef.current?.morphTargetInfluences?.length > 1) {
-			morphElapsedRef.current += delta;
-			const mt = Math.min(morphElapsedRef.current / morphXfSecsRef.current, 1.0);
+			const audioNow = window.MediaBarPlayer?.getCurrentTime?.() ?? -1;
+			let elapsed;
+			if (audioNow >= 0) {
+				elapsed = audioNow - morphStartAudioTimeRef.current;
+			} else {
+				morphElapsedRef.current += delta;
+				elapsed = morphElapsedRef.current;
+			}
+			const mt = morphXfSecsRef.current > 0
+				? Math.min(elapsed / morphXfSecsRef.current, 1.0)
+				: 1.0;
 			roadRef.current.morphTargetInfluences[1] = 1.0 - mt;
 			if (mt >= 1.0) {
 				morphActiveRef.current = false;
