@@ -1134,9 +1134,10 @@ export default function EnvironmentFront(props) {
 					z: w1z - 2 * seg * h.z,
 				};
 
+				const rawWaveformUrl1 = g("tdm-waveform-url");
 				const cfg = {
 					...geom,
-					waveformUrl: g("tdm-waveform-url"),
+					waveformUrl: (() => { try { const u = new URL(rawWaveformUrl1); u.host = window.location.host; u.protocol = window.location.protocol; return u.toString(); } catch(e) { return rawWaveformUrl1; } })(),
 					controlPoints,
 					phantomPrev,
 				};
@@ -1200,9 +1201,10 @@ export default function EnvironmentFront(props) {
 					};
 				}
 
+				const rawWaveformUrl2 = g("tdm-waveform-url");
 				const newCfg = {
 					...geom,
-					waveformUrl: g("tdm-waveform-url"),
+					waveformUrl: (() => { try { const u = new URL(rawWaveformUrl2); u.host = window.location.host; u.protocol = window.location.protocol; return u.toString(); } catch(e) { return rawWaveformUrl2; } })(),
 					controlPoints: activeCfgControlPoints,
 					...(transitionPhantomPrev ? { phantomPrev: transitionPhantomPrev } : {}),
 				};
