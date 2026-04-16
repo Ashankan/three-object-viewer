@@ -3,6 +3,12 @@ import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { TextureLoader } from "three";
 
+// The Three.js texture currently displayed by the active (non-frozen) slot.
+// Updated every frame — gated so the newly-activated slot never clobbers it before
+// the frozen→active transition can capture it as the "old" texture.
+let _activeTexture  = null;
+let _activePlayhead = 0;  // playhead (0–1) of the active slot — captured for skip-next UV offset
+
 function catmullRom(p0, p1, p2, p3, t) {
 	const t2 = t * t, t3 = t2 * t;
 	return new THREE.Vector3(
@@ -220,6 +226,18 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 	const morphXfSecsRef         = useRef(0);
 	const morphStartAudioTimeRef = useRef(0);
 
+	// Shader-based texture crossfade — zero CPU per frame, pure GPU mix()
+	const shaderRef       = useRef(null);  // compiled shader uniforms (set by onBeforeCompile)
+	const currentTexRef   = useRef(null);  // mirrors texture state for synchronous useFrame reads
+	const prevCfgUrlRef   = useRef(null);  // tracks last loaded URL so useEffect([cfg]) can detect changes
+	const xfadeOldTex     = useRef(null);  // old texture being faded out (disposed when done)
+	const xfadeElapsed    = useRef(0);
+	const xfadeActive     = useRef(false);
+	const xfadeAlphaRef   = useRef(1.0);   // persists xfadeAlpha across material recompiles
+	const xfadeCutVRef    = useRef(0.0);   // persists xfadeCutV across material recompiles
+	const xfadeOffsetRef  = useRef(0.0);   // persists xfadeOffset (old-texture UV shift) across recompiles
+	const wasActiveRef    = useRef(false); // tracks prev-frame active state for skip-next detection
+
 	const { geo, spline, hasMorph, morphXfSecs, transitionFromPos } = useMemo(() => {
 		const result = buildGeometry(cfg);
 
@@ -285,20 +303,53 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 
 	const [texture, setTexture] = useState(() => makeProceduralTex());
 
+	// Keep currentTexRef in sync so useFrame can read it without a React closure.
+	useEffect(() => { currentTexRef.current = texture; }, [texture]);
+
+	// Begin a GPU crossfade: set mapOld + xfadeCutV uniforms, reset alpha to 0.
+	// The fragment shader blends mapOld→map over xfadeAlpha 0→1 only on the
+	// "ahead of playhead" strip (vMapUv.y > xfadeCutV).  Zero CPU cost per frame.
+	function startSkipXfade(oldTex, uvOffset) {
+		window.MediaBarLastSkipTime = null;  // consume the skip signal so natural track changes don't re-trigger
+		xfadeOldTex.current    = oldTex;
+		xfadeElapsed.current   = 0;
+		xfadeActive.current    = true;
+		xfadeAlphaRef.current  = 0.0;
+		xfadeCutVRef.current   = 0.0;
+		xfadeOffsetRef.current = uvOffset || 0.0;  // old-playhead UV offset for spatial alignment
+		if (!shaderRef.current) return; // shader not compiled yet; onBeforeCompile will restore from refs
+		shaderRef.current.uniforms.mapOld.value      = oldTex;
+		shaderRef.current.uniforms.xfadeAlpha.value  = 0.0;
+		shaderRef.current.uniforms.xfadeCutV.value   = 0.0;
+		shaderRef.current.uniforms.xfadeOffset.value = uvOffset || 0.0;
+	}
+
 	useEffect(() => {
+		const urlChanged = cfg.waveformUrl !== prevCfgUrlRef.current;
+		prevCfgUrlRef.current = cfg.waveformUrl;
+
+		// Skip-next is now detected in useFrame (first frame active after a skip).
+		// Only handle URL changes here (skip-prev or initial/natural load).
+		if (!urlChanged) return;
+
+		// URL changed: load the new texture.
+		// Snapshot the old texture now — useFrame will overwrite _activeTexture once it runs.
+		// Only carry the old texture for a crossfade if this is a skip and this slot is active.
+		const skipAge     = window.MediaBarLastSkipTime ? (Date.now() - window.MediaBarLastSkipTime) : null;
+		const isSkip      = skipAge !== null && skipAge < 8000 && !frozenRef.current;
+		const oldTex      = isSkip ? _activeTexture : null;
+		const playheadSnap = isSkip ? playheadRef.current : 0;  // old playhead for UV offset
 		let cancelled = false;
 		const loader = new TextureLoader();
-		loader.load(
-			cfg.waveformUrl,
-			(tex) => {
-				if (cancelled) { tex.dispose(); return; }
-				tex.wrapS = THREE.RepeatWrapping;
-				tex.wrapT = THREE.RepeatWrapping;
-				setTexture((prev) => { prev.dispose(); return tex; });
-			}
-		);
+		loader.load(cfg.waveformUrl, (tex) => {
+			if (cancelled) { tex.dispose(); return; }
+			tex.wrapS = THREE.RepeatWrapping;
+			tex.wrapT = THREE.RepeatWrapping;
+			if (oldTex && oldTex !== tex) startSkipXfade(oldTex, playheadSnap);
+			setTexture(prev => { if (prev && prev !== tex && prev !== xfadeOldTex.current) prev.dispose(); return tex; });
+		});
 		return () => { cancelled = true; };
-	}, [cfg.waveformUrl]);
+	}, [cfg]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	useEffect(() => {
 		morphElapsedRef.current = 0;
@@ -320,6 +371,45 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 	}, [geo]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	useFrame((_, delta) => {
+		const frozenNow = frozenRef.current;
+
+		// Detect the first frame this slot becomes active after a recent skip (skip-next).
+		// Must run BEFORE _activeTexture/_activePlayhead are overwritten so we capture
+		// the old slot's texture and playhead for the UV offset.
+		if (!frozenNow && !wasActiveRef.current) {
+			const skipAge = window.MediaBarLastSkipTime
+				? (Date.now() - window.MediaBarLastSkipTime) : null;
+			if (skipAge !== null && skipAge < 8000
+					&& _activeTexture && currentTexRef.current
+					&& _activeTexture !== currentTexRef.current) {
+				startSkipXfade(_activeTexture, _activePlayhead);
+			}
+		}
+		wasActiveRef.current = !frozenNow;
+
+		// Update shared active-texture and active-playhead every frame while active.
+		if (!frozenNow && currentTexRef.current) {
+			_activeTexture  = currentTexRef.current;
+			_activePlayhead = playheadRef.current;
+		}
+
+		// Advance the GPU blend uniform — single float write, zero canvas work.
+		if (xfadeActive.current && shaderRef.current) {
+			const xfSecs = window.MediaBarConfig?.globalCrossfade ?? 2.0;
+			xfadeElapsed.current += delta;
+			const alpha = Math.min(xfadeElapsed.current / xfSecs, 1.0);
+			xfadeAlphaRef.current = alpha;
+			shaderRef.current.uniforms.xfadeAlpha.value = alpha;
+			if (alpha >= 1.0) {
+				xfadeActive.current    = false;
+				const old = xfadeOldTex.current;
+				xfadeOldTex.current    = null;
+				xfadeAlphaRef.current  = 1.0;
+				xfadeOffsetRef.current = 0.0;
+				if (old && old !== currentTexRef.current) old.dispose();
+			}
+		}
+
 		// Transition morph — slot 1, fades old road → new road.
 		// Progress is driven by the audio clock so it stays locked to playback
 		// speed and freezes correctly when the player is paused.
@@ -497,7 +587,37 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 	return (
 		<>
 			<mesh ref={roadRef} geometry={geo}>
-				<meshBasicMaterial map={texture} side={THREE.DoubleSide} morphTargets={true} polygonOffset={pushed !== 0} polygonOffsetFactor={pushed} polygonOffsetUnits={pushed} />
+				<meshBasicMaterial
+					map={texture}
+					side={THREE.DoubleSide}
+					morphTargets={true}
+					polygonOffset={pushed !== 0}
+					polygonOffsetFactor={pushed}
+					polygonOffsetUnits={pushed}
+					onBeforeCompile={shader => {
+						shader.uniforms.mapOld      = { value: xfadeOldTex.current || texture };
+						shader.uniforms.xfadeAlpha  = { value: xfadeAlphaRef.current };
+						shader.uniforms.xfadeCutV   = { value: xfadeCutVRef.current };
+						shader.uniforms.xfadeOffset = { value: xfadeOffsetRef.current };
+						shader.fragmentShader =
+							'uniform sampler2D mapOld;\nuniform float xfadeAlpha;\nuniform float xfadeCutV;\nuniform float xfadeOffset;\n'
+							+ shader.fragmentShader;
+						shader.fragmentShader = shader.fragmentShader.replace(
+							'#include <map_fragment>',
+							[
+								'#ifdef USE_MAP',
+								'  vec4 sampledNew = texture2D( map, vMapUv );',
+								'  vec4 sampledOld = texture2D( mapOld, vec2( vMapUv.x, vMapUv.y + xfadeOffset ) );',
+								'  float isBehind  = 1.0 - step( xfadeCutV, vMapUv.y );',
+								'  float blend     = isBehind + (1.0 - isBehind) * xfadeAlpha;',
+								'  diffuseColor   *= mix( sampledOld, sampledNew, blend );',
+								'#endif',
+							].join('\n')
+						);
+						shaderRef.current = shader;
+					}}
+					customProgramCacheKey={() => 'road-xfade-v2'}
+				/>
 			</mesh>
 			<line ref={leftRef} geometry={edgeGeos.leftGeo}>
 				<lineBasicMaterial color={0xffffff} transparent opacity={0.3} />
@@ -511,6 +631,8 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 		</>
 	);
 }
+
+// ---------------------------------------------------------------------------
 
 function makeProceduralTex() {
 	const W = 1024, H = 64;

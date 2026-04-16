@@ -1,6 +1,7 @@
 == Next to do ==
 
-Try to fix timing issue for ghost splines. Sometimes (very seldom) it doesn't get the ghost spline setting on the stitch between maps, if wrong it usually resets correct on song change.
+fix map/song buffer to load correct next map after skipping:
+when skipping songs on the media-bar, sometimes road-mesh loads wrong texture for the next map, when the song transitions the mesh hard-cut to the correct image.
 _ 
 Create "track analysis asset container" for "3D-map-block", Add waveform texture system.
 _ 
@@ -11,6 +12,9 @@ The goal is to make it possible to let track-meta data or something else for tha
 
 
 == Done in previous edit ==
+added texture crossfade on skip.
+_ 
+Fix: Sometimes (very seldom) it doesn't get the ghost spline setting on the stitch between maps, if wrong it usually resets correct on song change.
 _ 
 need to fix next map attaching to end of current map on skip track morph.
 _ 
