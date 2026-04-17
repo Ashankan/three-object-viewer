@@ -1112,6 +1112,12 @@ export default function EnvironmentFront(props) {
 		fetch("/wp-json/wp/v2/posts/" + nextId + "?_fields=content")
 			.then((r) => r.json())
 			.then((data) => {
+				// Stale-call guard: if roles changed while this fetch was in
+				// flight, nextSlot is no longer the "next" slot — it may now be
+				// active or previous.  Applying cfg would clobber the wrong slot
+				// and freeze it.  Discard silently; fetchRoadCfg().then() will
+				// call fetchPreviewRoadCfg() again with the updated roles.
+				if (nextSlot !== rolesRef.current.next) return;
 				const html = data?.content?.rendered || "";
 				const tmp = document.createElement("div");
 				tmp.innerHTML = html;
@@ -1159,7 +1165,7 @@ export default function EnvironmentFront(props) {
 				getSlotAnchorRef(nextSlot).current = { ...crossfadeWorldPosRef.current };
 				getSlotOriginRef(nextSlot).current = { ...activePosRef.current };
 			})
-			.catch(() => { getSlotCfgSetter(nextSlot)(null); });
+			.catch(() => { if (nextSlot !== rolesRef.current.next) return; getSlotCfgSetter(nextSlot)(null); });
 	}
 
 	// Fetch 3D map data from the post linked to the current media-bar track.

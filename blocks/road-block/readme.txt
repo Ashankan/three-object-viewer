@@ -1,6 +1,7 @@
 == Next to do ==
 
-fix song repeat on rapidly skipped tracks.
+next map still is wrong sometimes when skipping  to previous.
+only skipping the next doesn't introduce it, it's only the previous that somehow messes up the order, so I would guess it has something to do with how the roadMesh buffers maps and how it read/update from the played log.
 
 Create "track analysis asset container" for "3D-map-block", Add waveform texture system.
 _ 
@@ -11,6 +12,8 @@ The goal is to make it possible to let track-meta data or something else for tha
 
 
 == Done in previous edit ==
+fix song repeat on rapidly skipped tracks.
+_ 
 fix map/song buffer to load correct next map after skipping:
 when skipping songs on the media-bar, sometimes road-mesh loads wrong texture for the next map, when the song transitions the mesh hard-cut to the correct image.
 _ 
