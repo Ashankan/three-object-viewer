@@ -978,6 +978,13 @@ export default function EnvironmentFront(props) {
 	const slotBMorphFromRef = useRef(null);
 	const slotCMorphFromRef = useRef(null);
 
+	// Per-slot pending-URL refs — set synchronously to the incoming waveformUrl BEFORE
+	// frozenRef is cleared, so RoadMesh can detect a stale preview texture in the first
+	// useFrame after unfreezing (before React re-renders with the new cfg state).
+	const slotAPendingUrlRef = useRef(null);
+	const slotBPendingUrlRef = useRef(null);
+	const slotCPendingUrlRef = useRef(null);
+
 	// Shared refs (active slot writes, frozen slots read)
 	const activePosRef   = useRef({ x: 0, y: 0, z: 0 });
 	const crossfadeWorldPosRef = useRef({ x: 0, y: 0, z: 0 });
@@ -1028,6 +1035,11 @@ export default function EnvironmentFront(props) {
 		if (slot === 'A') return slotAMorphFromRef;
 		if (slot === 'B') return slotBMorphFromRef;
 		return slotCMorphFromRef;
+	}
+	function getSlotPendingUrlRef(slot) {
+		if (slot === 'A') return slotAPendingUrlRef;
+		if (slot === 'B') return slotBPendingUrlRef;
+		return slotCPendingUrlRef;
 	}
 	// Returns polygon offset layer: next=above(−1), active=0, previous=below(+1)
 	function getSlotLayer(slot) {
@@ -1290,8 +1302,12 @@ export default function EnvironmentFront(props) {
 					getSlotMorphFromRef(wasActive).current = null;
 				}
 
-				// Unfreeze and set cfg on new active
+				// Unfreeze and set cfg on new active.
+				// pendingUrlRef is set synchronously BEFORE frozenRef so the first
+				// useFrame after unfreezing can detect a stale preview texture and
+				// suppress the wrong skip-crossfade (the ref beats React state).
 				const activeSlotNow = rolesRef.current.active;
+				getSlotPendingUrlRef(activeSlotNow).current = newCfg.waveformUrl;
 				getSlotFrozenRef(activeSlotNow).current = false;
 				getSlotFrozenAsPrevRef(activeSlotNow).current = false;
 				getSlotOriginRef(activeSlotNow).current = null;
@@ -1472,6 +1488,7 @@ export default function EnvironmentFront(props) {
 								splineExportRef={slotASplineRef}
 								morphFromRef={slotAMorphFromRef}
 								curvatureScaleRef={curvatureScaleRef}
+								pendingUrlRef={slotAPendingUrlRef}
 								/>
 								</Suspense>
 								)}
@@ -1494,6 +1511,7 @@ export default function EnvironmentFront(props) {
 								splineExportRef={slotBSplineRef}
 								morphFromRef={slotBMorphFromRef}
 								curvatureScaleRef={curvatureScaleRef}
+								pendingUrlRef={slotBPendingUrlRef}
 								/>
 								</Suspense>
 								)}
@@ -1516,6 +1534,7 @@ export default function EnvironmentFront(props) {
 								splineExportRef={slotCSplineRef}
 								morphFromRef={slotCMorphFromRef}
 								curvatureScaleRef={curvatureScaleRef}
+								pendingUrlRef={slotCPendingUrlRef}
 								/>
 								</Suspense>
 								)}

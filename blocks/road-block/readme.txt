@@ -1,8 +1,7 @@
 == Next to do ==
 
-fix map/song buffer to load correct next map after skipping:
-when skipping songs on the media-bar, sometimes road-mesh loads wrong texture for the next map, when the song transitions the mesh hard-cut to the correct image.
-_ 
+fix song repeat on rapidly skipped tracks.
+
 Create "track analysis asset container" for "3D-map-block", Add waveform texture system.
 _ 
 need to make road block preview 3d-map in editor.
@@ -12,6 +11,9 @@ The goal is to make it possible to let track-meta data or something else for tha
 
 
 == Done in previous edit ==
+fix map/song buffer to load correct next map after skipping:
+when skipping songs on the media-bar, sometimes road-mesh loads wrong texture for the next map, when the song transitions the mesh hard-cut to the correct image.
+_ 
 added texture crossfade on skip.
 _ 
 Fix: Sometimes (very seldom) it doesn't get the ghost spline setting on the stitch between maps, if wrong it usually resets correct on song change.

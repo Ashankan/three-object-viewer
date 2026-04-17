@@ -216,7 +216,7 @@ function buildEdgeGeos(geo, straightPositions, N, transitionFromPos) {
 	return { leftGeo, rightGeo, leftBase, rightBase, leftStraight, rightStraight, leftMorphFrom, rightMorphFrom };
 }
 
-function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef, liveAnchorRef }) {
+function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef, liveAnchorRef, pendingUrlRef }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -237,6 +237,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 	const xfadeCutVRef    = useRef(0.0);   // persists xfadeCutV across material recompiles
 	const xfadeOffsetRef  = useRef(0.0);   // persists xfadeOffset (old-texture UV shift) across recompiles
 	const wasActiveRef    = useRef(false); // tracks prev-frame active state for skip-next detection
+	const loadedUrlRef    = useRef(null);  // waveformUrl of the texture currently in `texture` state
 
 	const { geo, spline, hasMorph, morphXfSecs, transitionFromPos } = useMemo(() => {
 		const result = buildGeometry(cfg);
@@ -330,7 +331,11 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 
 		// Skip-next is now detected in useFrame (first frame active after a skip).
 		// Only handle URL changes here (skip-prev or initial/natural load).
-		if (!urlChanged) return;
+		if (!urlChanged) {
+			// Preview was for the correct song (URL matches) — pending is already satisfied.
+			if (pendingUrlRef) pendingUrlRef.current = null;
+			return;
+		}
 
 		// URL changed: load the new texture.
 		// Snapshot the old texture now — useFrame will overwrite _activeTexture once it runs.
@@ -345,6 +350,9 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 			if (cancelled) { tex.dispose(); return; }
 			tex.wrapS = THREE.RepeatWrapping;
 			tex.wrapT = THREE.RepeatWrapping;
+			// Mark texture as current before crossfade so useFrame guards see it immediately.
+			loadedUrlRef.current = cfg.waveformUrl;
+			if (pendingUrlRef) pendingUrlRef.current = null;
 			if (oldTex && oldTex !== tex) startSkipXfade(oldTex, playheadSnap);
 			setTexture(prev => { if (prev && prev !== tex && prev !== xfadeOldTex.current) prev.dispose(); return tex; });
 		});
@@ -373,22 +381,37 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 	useFrame((_, delta) => {
 		const frozenNow = frozenRef.current;
 
+		// expectedUrl: the URL this slot is supposed to display.
+		// pendingUrlRef (a ref, set synchronously before frozenRef) beats cfg.waveformUrl
+		// (React state, deferred by one render) so we see the correct URL on the very
+		// first frame after a slot is unfrozen — before React has re-rendered with the
+		// new cfg.  This prevents a stale preview texture from being mistaken for the
+		// correct new texture during skip crossfade detection.
+		const expectedUrl = (pendingUrlRef?.current) ?? cfg.waveformUrl;
+
 		// Detect the first frame this slot becomes active after a recent skip (skip-next).
 		// Must run BEFORE _activeTexture/_activePlayhead are overwritten so we capture
 		// the old slot's texture and playhead for the UV offset.
+		// Guard: only fire when loadedUrlRef matches expectedUrl — otherwise this slot
+		// has a stale preview texture and _activeTexture must not be clobbered yet.
 		if (!frozenNow && !wasActiveRef.current) {
 			const skipAge = window.MediaBarLastSkipTime
 				? (Date.now() - window.MediaBarLastSkipTime) : null;
 			if (skipAge !== null && skipAge < 8000
 					&& _activeTexture && currentTexRef.current
-					&& _activeTexture !== currentTexRef.current) {
+					&& _activeTexture !== currentTexRef.current
+					&& loadedUrlRef.current === expectedUrl) {
 				startSkipXfade(_activeTexture, _activePlayhead);
 			}
 		}
 		wasActiveRef.current = !frozenNow;
 
 		// Update shared active-texture and active-playhead every frame while active.
-		if (!frozenNow && currentTexRef.current) {
+		// Guard: only update when the loaded texture matches the expected URL so a stale
+		// preview texture never overwrites _activeTexture (which the useEffect closure
+		// captures as oldTex for the correct skip crossfade source).
+		if (!frozenNow && currentTexRef.current
+				&& loadedUrlRef.current === expectedUrl) {
 			_activeTexture  = currentTexRef.current;
 			_activePlayhead = playheadRef.current;
 		}
@@ -659,7 +682,7 @@ function makeProceduralTex() {
 	return tex;
 }
 
-function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef, liveAnchorRef }) {
+function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef, liveAnchorRef, pendingUrlRef }) {
 	const roadRef  = useRef();
 	const leftRef  = useRef();
 	const rightRef = useRef();
@@ -922,9 +945,9 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 	);
 }
 
-export function RoadMesh({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef, liveAnchorRef }) {
+export function RoadMesh({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef, liveAnchorRef, pendingUrlRef }) {
 	if (cfg.waveformUrl) {
-		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} liveAnchorRef={liveAnchorRef} />;
+		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} liveAnchorRef={liveAnchorRef} pendingUrlRef={pendingUrlRef} />;
 	}
-	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} liveAnchorRef={liveAnchorRef} />;
+	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} liveAnchorRef={liveAnchorRef} pendingUrlRef={pendingUrlRef} />;
 }
