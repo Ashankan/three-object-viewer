@@ -1,6 +1,7 @@
 {
     "name": "three-object-viewer/tdm-block",
     "attributes": {
+        "analysisUrl":  { "type": "string",  "default": "" },
         "waveformUrl":  { "type": "string",  "default": "" },
         "controlPoints": {
             "type": "array",

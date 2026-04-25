@@ -1,5 +1,5 @@
 import { __ } from "@wordpress/i18n";
-import { useBlockProps, InspectorControls, MediaUpload } from "@wordpress/block-editor";
+import { useBlockProps, InspectorControls } from "@wordpress/block-editor";
 import { Panel, PanelBody, PanelRow, Button } from "@wordpress/components";
 import "./editor.scss";
 
@@ -30,35 +30,31 @@ export default function Edit({ attributes, setAttributes }) {
         <div {...useBlockProps()}>
             <InspectorControls>
                 <Panel header={__("3D Map Settings", "three-object-viewer")}>
-                    <PanelBody title={__("Waveform Texture", "three-object-viewer")} initialOpen={true}>
+                    <PanelBody title={__("Track Analysis", "three-object-viewer")} initialOpen={true}>
                         <PanelRow>
-                            <span style={{ fontSize: "12px", color: "#aaa" }}>
-                                {attributes.waveformUrl
-                                    ? attributes.waveformUrl.split("/").pop()
-                                    : __("No texture — procedural fallback used.", "three-object-viewer")}
-                            </span>
-                        </PanelRow>
-                        <PanelRow>
-                            <MediaUpload
-                                onSelect={(obj) => setAttributes({ waveformUrl: obj.url })}
-                                allowedTypes={["image"]}
-                                value={attributes.waveformUrl}
-                                render={({ open }) => (
-                                    <Button isSecondary onClick={open}>
-                                        {attributes.waveformUrl
-                                            ? __("Replace Waveform", "three-object-viewer")
-                                            : __("Select Waveform Image", "three-object-viewer")}
-                                    </Button>
+                            <div style={{ width: "100%" }}>
+                                <span style={{
+                                    display: "inline-block",
+                                    padding: "3px 10px",
+                                    borderRadius: "3px",
+                                    fontSize: "12px",
+                                    color: "#fff",
+                                    background: attributes.analysisUrl ? "#1a5c1a" : "#444",
+                                }}>
+                                    {attributes.analysisUrl
+                                        ? __("Analysis linked", "three-object-viewer")
+                                        : __("No analysis — procedural fallback", "three-object-viewer")}
+                                </span>
+                                {attributes.analysisUrl && (
+                                    <p style={{ fontSize: "11px", color: "#aaa", marginTop: "6px" }}>
+                                        {attributes.analysisUrl.split("/").pop()}
+                                    </p>
                                 )}
-                            />
+                                <p style={{ fontSize: "11px", color: "#888", marginTop: "8px" }}>
+                                    {__("To generate an analysis, open the linked Media Item and click Analyse Track.", "three-object-viewer")}
+                                </p>
+                            </div>
                         </PanelRow>
-                        {attributes.waveformUrl && (
-                            <PanelRow>
-                                <Button isDestructive isSmall onClick={() => setAttributes({ waveformUrl: "" })}>
-                                    {__("Clear", "three-object-viewer")}
-                                </Button>
-                            </PanelRow>
-                        )}
                     </PanelBody>
 
                     <PanelBody title={__("Centerline Control Points", "three-object-viewer")} initialOpen={true}>

@@ -9,6 +9,81 @@ import { TextureLoader } from "three";
 let _activeTexture  = null;
 let _activePlayhead = 0;  // playhead (0–1) of the active slot — captured for skip-next UV offset
 
+// ---------------------------------------------------------------------------
+// TrackAnalysisCache — fetches pre-analysed frequency JSON files and builds
+// Three.js DataTextures in memory. Keeps up to 3 entries (prev/current/next).
+// DataTextures are owned here; callers must NOT dispose them.
+// ---------------------------------------------------------------------------
+const TrackAnalysisCache = (() => {
+	const _cache   = new Map(); // url → { meta, frames: Uint8Array, texture: DataTexture|null }
+	const _pending = new Map(); // url → Promise
+
+	function load(url) {
+		if (_cache.has(url))   return Promise.resolve(_cache.get(url));
+		if (_pending.has(url)) return _pending.get(url);
+
+		const p = fetch(url)
+			.then(r => r.json())
+			.then(json => {
+				const b64 = json.frames;
+				const binaryStr = atob(b64);
+				const frames = new Uint8Array(binaryStr.length);
+				for (let i = 0; i < binaryStr.length; i++) frames[i] = binaryStr.charCodeAt(i);
+				const entry = { meta: json, frames, texture: null };
+				_cache.set(url, entry);
+				_pending.delete(url);
+				return entry;
+			});
+		_pending.set(url, p);
+		return p;
+	}
+
+	function buildTexture(entry) {
+		if (entry.texture) return entry.texture;
+		const { totalFrames, frequencyBands } = entry.meta;
+		// Correct orientation:
+		//   W (U axis, left→right across road) = frequencyBands — mirrored around centre
+		//   H (V axis, start→end along road)   = totalFrames   — time axis
+		// UV.y=0 → road start → frame 0; UV.y=1 → road end → last frame.
+		// Mirror mapping: low freq at road centre, higher freq toward edges.
+		//   left half  (col 0 → bands/2-1): band[(bands/2-1) - col]  (high→low toward centre)
+		//   right half (col bands/2 → bands-1): band[col - bands/2]   (low→high toward edge)
+		const W        = frequencyBands;
+		const H        = totalFrames;
+		const halfB    = Math.floor(frequencyBands / 2);
+		const data     = new Uint8Array(W * H);
+		for (let fi = 0; fi < H; fi++) {
+			const rowSrc = fi * frequencyBands;
+			const rowDst = fi * W;
+			for (let p = 0; p < W; p++) {
+				const bi = p < halfB ? (halfB - 1 - p) : (p - halfB);
+				data[rowDst + p] = entry.frames[rowSrc + bi];
+			}
+		}
+		const tex = new THREE.DataTexture(data, W, H, THREE.RedFormat, THREE.UnsignedByteType);
+		tex.wrapS      = THREE.ClampToEdgeWrapping;
+		tex.wrapT      = THREE.ClampToEdgeWrapping;
+		tex.minFilter  = THREE.LinearFilter;
+		tex.magFilter  = THREE.LinearFilter;
+		tex.needsUpdate = true;
+		entry.texture = tex;
+		return tex;
+	}
+
+	function evict(keepUrls) {
+		for (const [url, entry] of _cache) {
+			if (!keepUrls.has(url)) {
+				if (entry.texture) { entry.texture.dispose(); entry.texture = null; }
+				_cache.delete(url);
+			}
+		}
+	}
+
+	return { load, buildTexture, evict };
+})();
+
+export { TrackAnalysisCache };
+
 function catmullRom(p0, p1, p2, p3, t) {
 	const t2 = t * t, t3 = t2 * t;
 	return new THREE.Vector3(
@@ -326,8 +401,9 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 	}
 
 	useEffect(() => {
-		const urlChanged = cfg.waveformUrl !== prevCfgUrlRef.current;
-		prevCfgUrlRef.current = cfg.waveformUrl;
+		const activeUrl  = cfg.analysisUrl || cfg.waveformUrl;
+		const urlChanged = activeUrl !== prevCfgUrlRef.current;
+		prevCfgUrlRef.current = activeUrl;
 
 		// Skip-next is now detected in useFrame (first frame active after a skip).
 		// Only handle URL changes here (skip-prev or initial/natural load).
@@ -340,10 +416,26 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 		// URL changed: load the new texture.
 		// Snapshot the old texture now — useFrame will overwrite _activeTexture once it runs.
 		// Only carry the old texture for a crossfade if this is a skip and this slot is active.
-		const skipAge     = window.MediaBarLastSkipTime ? (Date.now() - window.MediaBarLastSkipTime) : null;
-		const isSkip      = skipAge !== null && skipAge < 8000 && !frozenRef.current;
-		const oldTex      = isSkip ? _activeTexture : null;
-		const playheadSnap = isSkip ? playheadRef.current : 0;  // old playhead for UV offset
+		const skipAge      = window.MediaBarLastSkipTime ? (Date.now() - window.MediaBarLastSkipTime) : null;
+		const isSkip       = skipAge !== null && skipAge < 8000 && !frozenRef.current;
+		const oldTex       = isSkip ? _activeTexture : null;
+		const playheadSnap = isSkip ? playheadRef.current : 0;
+
+		if (cfg.analysisUrl) {
+			// DataTexture path — cache owns texture lifetime, do not dispose
+			let cancelled = false;
+			TrackAnalysisCache.load(cfg.analysisUrl).then(entry => {
+				if (cancelled) return;
+				const tex = TrackAnalysisCache.buildTexture(entry);
+				loadedUrlRef.current = cfg.analysisUrl;
+				if (pendingUrlRef) pendingUrlRef.current = null;
+				if (oldTex && oldTex !== tex) startSkipXfade(oldTex, playheadSnap);
+				setTexture(() => tex);
+			}).catch(err => console.warn('[RoadMesh] analysis load failed', err));
+			return () => { cancelled = true; };
+		}
+
+		// Image texture path (waveformUrl)
 		let cancelled = false;
 		const loader = new TextureLoader();
 		loader.load(cfg.waveformUrl, (tex) => {
@@ -387,7 +479,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 		// first frame after a slot is unfrozen — before React has re-rendered with the
 		// new cfg.  This prevents a stale preview texture from being mistaken for the
 		// correct new texture during skip crossfade detection.
-		const expectedUrl = (pendingUrlRef?.current) ?? cfg.waveformUrl;
+		const expectedUrl = (pendingUrlRef?.current) ?? (cfg.analysisUrl || cfg.waveformUrl);
 
 		// Detect the first frame this slot becomes active after a recent skip (skip-next).
 		// Must run BEFORE _activeTexture/_activePlayhead are overwritten so we capture
@@ -946,7 +1038,7 @@ function RoadMeshProcedural({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clip
 }
 
 export function RoadMesh({ cfg, playheadRef, frozenRef, frozenAsPrevRef, clipIndexRef, activePosRef, originPosRef, frozenAnchorRef, crossfadeWorldPosRef, crossfadeHeadingRef, currentHeadingRef, pushed, isActive, splineExportRef, morphFromRef, curvatureScaleRef, liveAnchorRef, pendingUrlRef }) {
-	if (cfg.waveformUrl) {
+	if (cfg.analysisUrl || cfg.waveformUrl) {
 		return <RoadMeshWithTexture cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} liveAnchorRef={liveAnchorRef} pendingUrlRef={pendingUrlRef} />;
 	}
 	return <RoadMeshProcedural cfg={cfg} playheadRef={playheadRef} frozenRef={frozenRef} frozenAsPrevRef={frozenAsPrevRef} clipIndexRef={clipIndexRef} activePosRef={activePosRef} originPosRef={originPosRef} frozenAnchorRef={frozenAnchorRef} crossfadeWorldPosRef={crossfadeWorldPosRef} crossfadeHeadingRef={crossfadeHeadingRef} currentHeadingRef={currentHeadingRef} pushed={pushed} isActive={isActive} splineExportRef={splineExportRef} morphFromRef={morphFromRef} curvatureScaleRef={curvatureScaleRef} liveAnchorRef={liveAnchorRef} pendingUrlRef={pendingUrlRef} />;

@@ -6,6 +6,7 @@ export default function save({ attributes }) {
         <div {...useBlockProps.save()}>
             <div className="three-object-three-app-3d-map">
                 <p className="tdm-waveform-url">{attributes.waveformUrl}</p>
+                <p className="tdm-analysis-url">{attributes.analysisUrl}</p>
                 <p className="tdm-control-points" data-points={JSON.stringify(pts)}></p>
             </div>
         </div>

@@ -1,10 +1,20 @@
 == Next to do ==
+Create "track analysis asset" for "3D-map-block", Add waveform texture system:
+
+I would like to choose how many frequency bands are sampled, and the refresh-rate/framerate.
+the values should be stored in 0-255 value, while frame rate should be adjustable between 30-60Hz.
+With those values I can use them directly with DMX-gear.
+Instead of selecting a waveform in the road-map-block we need to generate a file based on frequency analyze of track.
+The question is if it should genereate a datafile that generates textures via script on load, or if it should generate an image-texture-file instead.
+I think datafile sounds smarter in terms of having the option to add more track analysis functions later, also makes any edits to the texture genereting function update textures on all tracks.
+The generator would need to generate a texture in memory for the 3 tracks that allways is in memory as previous, current, and next map/track.
+
+_ 
 
 next map still is wrong sometimes when skipping  to previous.
 only skipping the next doesn't introduce it, it's only the previous that somehow messes up the order, so I would guess it has something to do with how the roadMesh buffers maps and how it read/update from the played log.
+_
 
-Create "track analysis asset container" for "3D-map-block", Add waveform texture system.
-_ 
 need to make road block preview 3d-map in editor.
 _ 
 Need to add start of track/map marking overlay that blends road stitching with an overlay.

@@ -52,7 +52,7 @@ import { NPCObject } from "./core/front/NPCObject";
 import { Portal } from "./core/front/Portal";
 import { ThreeSky } from "./core/front/ThreeSky";
 import { TextObject } from "./core/front/TextObject";
-import { RoadMesh } from "./core/front/RoadMesh";
+import { RoadMesh, TrackAnalysisCache } from "./core/front/RoadMesh";
 import { useKeyboardControls } from "./Controls";
 import { ContextBridgeComponent } from "./ContextBridgeComponent";
 
@@ -1103,6 +1103,47 @@ export default function EnvironmentFront(props) {
 		return null;
 	}
 
+	// Returns the next track object (same lookup order as getNextMapPostId, but full item).
+	function getNextItem() {
+		const playlist = window.MediaBarPlaylist;
+		const random   = window.MediaBarRandomPlaylist;
+		if (playlist && playlist.isInLogNavigation()) {
+			const log     = playlist.getPlayedLog();
+			const current = window.MediaBarPlayer?.getCurrentItem();
+			if (current && log.length > 0) {
+				let curIdx = -1;
+				for (let i = log.length - 1; i >= 0; i--) {
+					if (log[i].id === current.id) { curIdx = i; break; }
+				}
+				if (curIdx >= 0 && curIdx + 1 < log.length) return log[curIdx + 1];
+			}
+		}
+		if (playlist) {
+			const inject = playlist.getInjectNext();
+			if (inject) return inject;
+			const q = playlist.getQueue();
+			if (q.length > 0) return q[0];
+		}
+		if (random) {
+			const peek = random.peekNext();
+			if (peek) return peek;
+		}
+		return null;
+	}
+
+	// Rewrite the URL origin to the current window location (handles local/tunnel mismatch).
+	function rewriteOrigin(url) {
+		if (!url) return '';
+		try {
+			const u = new URL(url);
+			u.host     = window.location.host;
+			u.protocol = window.location.protocol;
+			return u.toString();
+		} catch (e) {
+			return url;
+		}
+	}
+
 	// Fetch 3D map cfg for the NEXT track in the queue (preview map).
 	function fetchPreviewRoadCfg() {
 		const nextSlot = rolesRef.current.next;
@@ -1152,13 +1193,22 @@ export default function EnvironmentFront(props) {
 					z: w1z - 2 * seg * h.z,
 				};
 
-				const rawWaveformUrl1 = g("tdm-waveform-url");
+				const nextItem      = getNextItem();
+				const rawAnalysisUrl1  = nextItem?.analysis_url || '';
+				const rawWaveformUrl1  = rawAnalysisUrl1 ? '' : g("tdm-waveform-url");
+				const analysisUrl1     = rewriteOrigin(rawAnalysisUrl1);
 				const cfg = {
 					...geom,
-					waveformUrl: (() => { try { const u = new URL(rawWaveformUrl1); u.host = window.location.host; u.protocol = window.location.protocol; return u.toString(); } catch(e) { return rawWaveformUrl1; } })(),
+					analysisUrl: analysisUrl1,
+					waveformUrl: rewriteOrigin(rawWaveformUrl1),
 					controlPoints,
 					phantomPrev,
 				};
+				if (analysisUrl1) {
+					TrackAnalysisCache.load(analysisUrl1)
+						.then(entry => TrackAnalysisCache.buildTexture(entry))
+						.catch(() => {});
+				}
 				getSlotCfgSetter(nextSlot)(cfg);
 				getSlotFrozenRef(nextSlot).current = true;
 				// Anchor at crossfade marker, origin at current active pos
@@ -1219,10 +1269,13 @@ export default function EnvironmentFront(props) {
 					};
 				}
 
-				const rawWaveformUrl2 = g("tdm-waveform-url");
+				const rawAnalysisUrl2  = item?.analysis_url || '';
+				const rawWaveformUrl2  = rawAnalysisUrl2 ? '' : g("tdm-waveform-url");
+				const analysisUrl2     = rewriteOrigin(rawAnalysisUrl2);
 				const newCfg = {
 					...geom,
-					waveformUrl: (() => { try { const u = new URL(rawWaveformUrl2); u.host = window.location.host; u.protocol = window.location.protocol; return u.toString(); } catch(e) { return rawWaveformUrl2; } })(),
+					analysisUrl: analysisUrl2,
+					waveformUrl: rewriteOrigin(rawWaveformUrl2),
 					controlPoints: activeCfgControlPoints,
 					...(transitionPhantomPrev ? { phantomPrev: transitionPhantomPrev } : {}),
 				};
@@ -1313,7 +1366,7 @@ export default function EnvironmentFront(props) {
 				// useFrame after unfreezing can detect a stale preview texture and
 				// suppress the wrong skip-crossfade (the ref beats React state).
 				const activeSlotNow = rolesRef.current.active;
-				getSlotPendingUrlRef(activeSlotNow).current = newCfg.waveformUrl;
+				getSlotPendingUrlRef(activeSlotNow).current = newCfg.analysisUrl || newCfg.waveformUrl;
 				getSlotFrozenRef(activeSlotNow).current = false;
 				getSlotFrozenAsPrevRef(activeSlotNow).current = false;
 				getSlotOriginRef(activeSlotNow).current = null;
@@ -1326,6 +1379,15 @@ export default function EnvironmentFront(props) {
 					const candidates = ['A','B','C'].filter(s => s !== rolesRef.current.active && s !== rolesRef.current.previous);
 					rolesRef.current.next = candidates[0] || null;
 				}
+
+				// Evict analysis cache entries not referenced by any active slot
+				const keepAnalysisUrls = new Set();
+				[slotACfg, slotBCfg, slotCCfg].forEach(sc => {
+					if (sc?.analysisUrl) keepAnalysisUrls.add(sc.analysisUrl);
+				});
+				if (newCfg.analysisUrl) keepAnalysisUrls.add(newCfg.analysisUrl);
+				if (keepAnalysisUrls.size > 0) TrackAnalysisCache.evict(keepAnalysisUrls);
+
 				fetchPreviewRoadCfg();
 			})
 			.catch(() => {});
