@@ -41,26 +41,64 @@ const TrackAnalysisCache = (() => {
 	function buildTexture(entry) {
 		if (entry.texture) return entry.texture;
 		const { totalFrames, frequencyBands } = entry.meta;
-		// Correct orientation:
-		//   W (U axis, left→right across road) = frequencyBands — mirrored around centre
-		//   H (V axis, start→end along road)   = totalFrames   — time axis
-		// UV.y=0 → road start → frame 0; UV.y=1 → road end → last frame.
-		// Mirror mapping: low freq at road centre, higher freq toward edges.
-		//   left half  (col 0 → bands/2-1): band[(bands/2-1) - col]  (high→low toward centre)
-		//   right half (col bands/2 → bands-1): band[col - bands/2]   (low→high toward edge)
-		const W        = frequencyBands;
-		const H        = totalFrames;
-		const halfB    = Math.floor(frequencyBands / 2);
-		const data     = new Uint8Array(W * H);
+
+		const mbCfg        = window.MediaBarConfig || {};
+		const cLow         = mbCfg.analysisColorLow  || [0, 85, 255];
+		const cMid         = mbCfg.analysisColorMid  || [0, 204, 68];
+		const cHigh        = mbCfg.analysisColorHigh || [255, 68, 0];
+		const isTransparent = !!mbCfg.analysisTransparent;
+
+		// W = 256 road-width pixels (U axis, left→right)
+		// H = totalFrames (V axis, start→end along road)
+		const W     = 256;
+		const H     = totalFrames;
+		const B     = frequencyBands;
+		const third = Math.max(1, Math.floor(B / 3));
+		// soft anti-alias edge width in normalised U units
+		const softPx = 3 / W;
+		const data  = new Uint8Array(W * H * 4);
+
 		for (let fi = 0; fi < H; fi++) {
-			const rowSrc = fi * frequencyBands;
-			const rowDst = fi * W;
+			const rowSrc = fi * B;
+
+			// RMS amplitude across all bands → 0..1
+			let sumSq = 0;
+			for (let b = 0; b < B; b++) {
+				const v = entry.frames[rowSrc + b] / 255;
+				sumSq += v * v;
+			}
+			const amp = Math.sqrt(sumSq / B);
+
+			// Low/mid/high energy for colour blend
+			let lowE = 0, midE = 0, highE = 0;
+			for (let b = 0; b < third; b++)           lowE  += entry.frames[rowSrc + b];
+			for (let b = third; b < 2 * third; b++)   midE  += entry.frames[rowSrc + b];
+			for (let b = 2 * third; b < B; b++)       highE += entry.frames[rowSrc + b];
+			const total = lowE + midE + highE || 1;
+			const wL = lowE / total, wM = midE / total, wH = highE / total;
+			const r = Math.round(cLow[0] * wL + cMid[0] * wM + cHigh[0] * wH);
+			const g = Math.round(cLow[1] * wL + cMid[1] * wM + cHigh[1] * wH);
+			const b = Math.round(cLow[2] * wL + cMid[2] * wM + cHigh[2] * wH);
+
+			const rowDst = fi * W * 4;
 			for (let p = 0; p < W; p++) {
-				const bi = p < halfB ? (halfB - 1 - p) : (p - halfB);
-				data[rowDst + p] = entry.frames[rowSrc + bi];
+				// dist = 0 at road centre, 1 at left/right edge
+				const dist  = Math.abs(p / (W - 1) - 0.5) * 2;
+				const alpha = Math.max(0, Math.min(1, (amp - dist) / softPx));
+				const i4    = rowDst + p * 4;
+				if (alpha > 0) {
+					data[i4]     = Math.round(r * alpha);
+					data[i4 + 1] = Math.round(g * alpha);
+					data[i4 + 2] = Math.round(b * alpha);
+					data[i4 + 3] = Math.round(alpha * 255);
+				} else {
+					data[i4] = data[i4 + 1] = data[i4 + 2] = 0;
+					data[i4 + 3] = isTransparent ? 0 : 255;
+				}
 			}
 		}
-		const tex = new THREE.DataTexture(data, W, H, THREE.RedFormat, THREE.UnsignedByteType);
+
+		const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
 		tex.wrapS      = THREE.ClampToEdgeWrapping;
 		tex.wrapT      = THREE.ClampToEdgeWrapping;
 		tex.minFilter  = THREE.LinearFilter;
@@ -706,6 +744,7 @@ function RoadMeshWithTexture({ cfg, playheadRef, frozenRef, frozenAsPrevRef, cli
 					map={texture}
 					side={THREE.DoubleSide}
 					morphTargets={true}
+					transparent={!!(cfg.analysisUrl && (window.MediaBarConfig?.analysisTransparent))}
 					polygonOffset={pushed !== 0}
 					polygonOffsetFactor={pushed}
 					polygonOffsetUnits={pushed}
