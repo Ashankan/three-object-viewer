@@ -3,8 +3,8 @@ import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader";
-import { AudioListener, Group, Quaternion, VectorKeyframeTrack, QuaternionKeyframeTrack, LoopPingPong, AnimationClip, NumberKeyframeTrack, AnimationMixer, Vector3, BufferGeometry, MeshBasicMaterial, DoubleSide, Mesh, CircleGeometry, sRGBEncoding } from "three";
-import { RigidBody } from "@react-three/rapier";
+import { AudioListener, Group, Quaternion, VectorKeyframeTrack, QuaternionKeyframeTrack, LoopPingPong, AnimationClip, NumberKeyframeTrack, AnimationMixer, Vector3, Box3, BufferGeometry, MeshBasicMaterial, DoubleSide, Mesh, CircleGeometry, sRGBEncoding } from "three";
+import { RigidBody, CuboidCollider, interactionGroups } from "@react-three/rapier";
 import {
 	useAnimations,
 	Text
@@ -318,59 +318,59 @@ export function ModelObject(model) {
 	});
 
 	if (model.collidable === "1") {
-		return (
+		if (audioObject) {
+			return (
 				<RigidBody
 					type="fixed"
-					colliders={audioObject ? "cuboid" : "trimesh"}
+					colliders="cuboid"
+					collisionGroups={interactionGroups(2, [0])}
 					lockRotations={true}
 					lockTranslations={true}
-					rotation={[
-						model.rotationX,
-						model.rotationY,
-						model.rotationZ
-					]}
-					position={[
-						Number(model.positionX),
-						Number(model.positionY),
-						Number(model.positionZ)
-					]}
+					rotation={[model.rotationX, model.rotationY, model.rotationZ]}
+					position={[Number(model.positionX), Number(model.positionY), Number(model.positionZ)]}
 					scale={[Number(model.scaleX) + 0.01, Number(model.scaleY) + 0.01, Number(model.scaleZ) + 0.01]}
-					onCollisionEnter={(manifold, target, other) => {
+					onCollisionEnter={() => {
 						setClickEvent(!clicked);
-						if (audioObject) {
-							if (clicked) {
-								audioObject.play();
-								triangle.material.visible = false;
-								circle.material.visible = false;
-							} else {
-								audioObject.pause();
-								triangle.material.visible = true;
-								circle.material.visible = true;
-							}
+						if (clicked) {
+							audioObject.play();
+							triangle.material.visible = false;
+							circle.material.visible = false;
+						} else {
+							audioObject.pause();
+							triangle.material.visible = true;
+							circle.material.visible = true;
 						}
 					}}
-				// onCollisionEnter={ ( props ) =>(
-				// 	// window.location.href = model.destinationUrl
-				// 	)
-				// }
 				>
-					<primitive
-						object={gltf.scene}
-						// castShadow
-						// receiveShadow
-						// rotation={[
-						// 	model.rotationX,
-						// 	model.rotationY,
-						// 	model.rotationZ
-						// ]}
-						// position={[
-						// 	model.positionX,
-						// 	model.positionY,
-						// 	model.positionZ
-						// ]}
-						// scale={[model.scaleX, model.scaleY, model.scaleZ]}
-					/>
+					<primitive object={gltf.scene} />
 				</RigidBody>
+			);
+		}
+
+		const bbox = new Box3().setFromObject(gltf.scene);
+		const size = bbox.getSize(new Vector3());
+		const center = bbox.getCenter(new Vector3());
+
+		return (
+			<RigidBody
+				type="fixed"
+				colliders={false}
+				collisionGroups={interactionGroups(0, [0, 1])}
+				lockRotations={true}
+				lockTranslations={true}
+				rotation={[model.rotationX, model.rotationY, model.rotationZ]}
+				position={[Number(model.positionX), Number(model.positionY), Number(model.positionZ)]}
+				scale={[Number(model.scaleX) + 0.01, Number(model.scaleY) + 0.01, Number(model.scaleZ) + 0.01]}
+				onCollisionEnter={() => {
+					setClickEvent(!clicked);
+				}}
+			>
+				<CuboidCollider
+					args={[size.x / 2, size.y / 2, size.z / 2]}
+					position={[center.x, center.y, center.z]}
+				/>
+				<primitive object={gltf.scene} />
+			</RigidBody>
 		);
 	}
 	return (
