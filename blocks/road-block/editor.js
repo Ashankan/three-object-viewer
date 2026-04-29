@@ -225,6 +225,79 @@
                     )
                 ),
 
+                // ── Car Model ─────────────────────────────────────────────
+                el(PanelBody, { title: 'Car Model', initialOpen: false },
+                    el(PanelRow, {},
+                        el('span', { style: { fontSize: '12px', color: '#aaa' } },
+                            attributes.carModelUrl
+                                ? 'Model: ' + attributes.carModelUrl.split('/').pop()
+                                : 'No car model set.'
+                        )
+                    ),
+                    el(PanelRow, {},
+                        el(MediaUpload, {
+                            onSelect: function (obj) { setAttributes({ carModelUrl: obj.url }); },
+                            allowedTypes: ['application/octet-stream', 'model/gltf-binary'],
+                            value: attributes.carModelUrl,
+                            render: function (ref) {
+                                return el(Button, { isSecondary: true, onClick: ref.open },
+                                    attributes.carModelUrl ? 'Replace Model' : 'Select Car Model (GLB)'
+                                );
+                            }
+                        })
+                    ),
+                    attributes.carModelUrl && el(PanelRow, {},
+                        el(Button, {
+                            isDestructive: true, isSmall: true,
+                            onClick: function () { setAttributes({ carModelUrl: '' }); }
+                        }, 'Clear')
+                    ),
+                    el(PanelRow, {},
+                        el(RangeControl, {
+                            label: 'Height Offset',
+                            help: 'Y offset above road surface.',
+                            value: attributes.carHeightOffset,
+                            min: -2, max: 2, step: 0.01,
+                            onChange: function (v) { setAttributes({ carHeightOffset: v }); }
+                        })
+                    ),
+                    el(PanelRow, {},
+                        el(RangeControl, {
+                            label: 'Lateral Offset',
+                            help: 'X offset from road center (positive = right).',
+                            value: attributes.carLateralOffset,
+                            min: -4, max: 4, step: 0.05,
+                            onChange: function (v) { setAttributes({ carLateralOffset: v }); }
+                        })
+                    ),
+                    el(PanelRow, {},
+                        el(RangeControl, {
+                            label: 'Forward Offset',
+                            help: 'Z offset along road (negative = ahead of camera).',
+                            value: attributes.carForwardOffset,
+                            min: -4, max: 4, step: 0.05,
+                            onChange: function (v) { setAttributes({ carForwardOffset: v }); }
+                        })
+                    ),
+                    el(PanelRow, {},
+                        el(RangeControl, {
+                            label: 'Scale',
+                            value: attributes.carScale,
+                            min: 0.01, max: 5, step: 0.01,
+                            onChange: function (v) { setAttributes({ carScale: v }); }
+                        })
+                    ),
+                    el(PanelRow, {},
+                        el(RangeControl, {
+                            label: 'Wheelbase (fallback)',
+                            help: 'Used if model has no CarFrontAxle/CarRearAxle empties.',
+                            value: attributes.carWheelbase,
+                            min: 0.5, max: 8, step: 0.1,
+                            onChange: function (v) { setAttributes({ carWheelbase: v }); }
+                        })
+                    )
+                ),
+
                 // ── Centerline Control Points ──────────────────────────────
                 el(PanelBody, { title: 'Centerline Control Points', initialOpen: true },
                     el(PanelRow, {},
@@ -301,7 +374,13 @@
                 el('p', {
                     className: 'road-control-points',
                     'data-points': JSON.stringify(a.controlPoints || [])
-                }, '')
+                }, ''),
+                el('p', { className: 'road-block-car-model-url' },      a.carModelUrl || ''),
+                el('p', { className: 'road-block-car-height-offset' },  String(a.carHeightOffset)),
+                el('p', { className: 'road-block-car-lateral-offset' }, String(a.carLateralOffset)),
+                el('p', { className: 'road-block-car-forward-offset' }, String(a.carForwardOffset)),
+                el('p', { className: 'road-block-car-scale' },          String(a.carScale)),
+                el('p', { className: 'road-block-car-wheelbase' },      String(a.carWheelbase))
             )
         );
     }
@@ -321,7 +400,14 @@
             camHeight:     { type: 'number',  default: 0.8 },
             lookAhead:     { type: 'integer', default: 8 },
             fov:           { type: 'integer', default: 70 },
-            waveformUrl:   { type: 'string',  default: '' },
+            waveformUrl:      { type: 'string',  default: '' },
+            carModelUrl:      { type: 'string',  default: '' },
+            carHeightOffset:  { type: 'number',  default: 0.0 },
+            carLateralOffset: { type: 'number',  default: 0.0 },
+            carForwardOffset: { type: 'number',  default: 0.0 },
+            carScale:         { type: 'number',  default: 1.0 },
+            carWheelbase:        { type: 'number',  default: 2.5 },
+            carRotationOffset:   { type: 'number',  default: 0.0 },
             controlPoints: {
                 type: 'array',
                 default: [

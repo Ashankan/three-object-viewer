@@ -21,6 +21,14 @@ const roadGeom = roadDomEl ? {
 	unitsPerSec: parseFloat(roadDomEl.querySelector(".road-block-ups")?.textContent)     || 8,
 	duration:    parseFloat(roadDomEl.querySelector(".road-block-duration")?.textContent) || 60,
 } : { roadWidth: 2.5, segments: 160, unitsPerSec: 8, duration: 60 };
+const carCfg = roadDomEl ? {
+	carModelUrl:      roadDomEl.querySelector(".road-block-car-model-url")?.textContent?.trim() || '',
+	carHeightOffset:  parseFloat(roadDomEl.querySelector(".road-block-car-height-offset")?.textContent) || 0,
+	carLateralOffset: parseFloat(roadDomEl.querySelector(".road-block-car-lateral-offset")?.textContent) || 0,
+	carForwardOffset: parseFloat(roadDomEl.querySelector(".road-block-car-forward-offset")?.textContent) || 0,
+	carScale:         parseFloat(roadDomEl.querySelector(".road-block-car-scale")?.textContent) || 1.0,
+	carWheelbase:     parseFloat(roadDomEl.querySelector(".road-block-car-wheelbase")?.textContent) || 2.5,
+} : null;
 const npcsToAdd = document.querySelectorAll(
 	".three-object-three-app-npc-block"
 );
@@ -158,6 +166,7 @@ threeApp.forEach((threeApp) => {
 						hdr ={hdr ? hdr : ""}
 						roadToAdd={hasRoadBlock ? true : null}
 						roadGeom={roadGeom}
+						carCfg={carCfg}
 					/>
 \			</>,
 			threeApp

@@ -53,6 +53,7 @@ import { Portal } from "./core/front/Portal";
 import { ThreeSky } from "./core/front/ThreeSky";
 import { TextObject } from "./core/front/TextObject";
 import { RoadMesh, TrackAnalysisCache } from "./core/front/RoadMesh";
+import { CarObject } from "./core/front/CarObject";
 import { useKeyboardControls } from "./Controls";
 import { ContextBridgeComponent } from "./ContextBridgeComponent";
 
@@ -1605,6 +1606,15 @@ export default function EnvironmentFront(props) {
 								pendingUrlRef={slotCPendingUrlRef}
 								/>
 								</Suspense>
+								)}
+								{props.roadToAdd && props.carCfg?.carModelUrl && (
+									<Suspense fallback={null}>
+										<CarObject
+											carCfg={props.carCfg}
+											currentHeadingRef={currentHeadingRef}
+											curvatureScaleRef={curvatureScaleRef}
+										/>
+									</Suspense>
 								)}
 								<Physics
 								// debug

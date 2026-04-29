@@ -7,7 +7,13 @@
         "duration":    { "type": "number",  "default": 60.0 },
         "camHeight":   { "type": "number",  "default": 0.8 },
         "lookAhead":   { "type": "integer", "default": 8 },
-        "fov":         { "type": "integer", "default": 70 }
+        "fov":         { "type": "integer", "default": 70 },
+        "carModelUrl":      { "type": "string", "default": "" },
+        "carHeightOffset":  { "type": "number", "default": 0.0 },
+        "carLateralOffset": { "type": "number", "default": 0.0 },
+        "carForwardOffset": { "type": "number", "default": 0.0 },
+        "carScale":         { "type": "number", "default": 1.0 },
+        "carWheelbase":     { "type": "number", "default": 2.5 }
     },
     "category": "design",
     "parent": ["three-object-viewer/environment"],
