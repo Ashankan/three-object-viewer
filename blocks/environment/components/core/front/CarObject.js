@@ -7,9 +7,8 @@ import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader";
 
 export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 	const groupRef    = useRef();
-	// Tracks the world position of the rear axle each frame
-	const rearRef     = useRef(new THREE.Vector3(0, 0, carCfg.carWheelbase));
-	// Smoothed heading — prevents stepping from discrete spline segment boundaries
+	// Smoothed heading — IS the car body angle; the per-frame alpha provides the
+	// wheelbase-lag effect. Rear axle is derived from this, not tracked separately.
 	const smoothH     = useRef({ x: 0, z: -1 });
 	// Axle data read from named empties in the GLTF
 	// fPos / rPos: local positions of CarFrontAxle and CarRearAxle within gltf.scene
@@ -38,7 +37,6 @@ export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 			// Direction rear→front in the model's own local XZ space
 			const localAngle = Math.atan2(fPos.x - rPos.x, fPos.z - rPos.z);
 			axleDataRef.current = { fPos, rPos, wb, localAngle };
-			rearRef.current.set(0, 0, wb);
 		}
 
 		const first = Object.values(actions)[0];
@@ -69,23 +67,20 @@ export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 		const h  = sh;
 		const wb = axleDataRef.current?.wb ?? carCfg.carWheelbase;
 
-		// Right vector in XZ = cross(heading, worldUp) = (h.z, -h.x)
-		// World position of the front axle: placed halfWheelbase ahead, plus user offsets
+		// Derive front and rear axle positions directly from the smoothed body heading.
+		// In a fixed-world-origin system the front axle never translates, so a
+		// position-based trailer-drag equation locks the rear in its angled position
+		// forever once the constraint wb-distance is satisfied.  Deriving both axles
+		// from the same body angle means the car always straightens whenever the road
+		// does — the lag comes from smoothH's alpha filter, not from positional drag.
 		const halfWb  = wb / 2;
-		const worldFX = h.x * halfWb + h.z * carCfg.carLateralOffset + h.x * carCfg.carForwardOffset;
-		const worldFZ = h.z * halfWb - h.x * carCfg.carLateralOffset + h.z * carCfg.carForwardOffset;
-
-		// Rear axle follows front: stays exactly wheelbase behind, in the direction already travelled
-		const rear = rearRef.current;
-		const dx   = worldFX - rear.x;
-		const dz   = worldFZ - rear.z;
-		const dist = Math.sqrt(dx * dx + dz * dz);
-		if (dist > 0.0001) {
-			rear.x = worldFX - (dx / dist) * wb;
-			rear.z = worldFZ - (dz / dist) * wb;
-		}
-		const worldRX = rear.x;
-		const worldRZ = rear.z;
+		// Right = (h.z, -h.x); lateral/forward offsets shift the whole car.
+		const centerX = h.z * carCfg.carLateralOffset + h.x * carCfg.carForwardOffset;
+		const centerZ = -h.x * carCfg.carLateralOffset + h.z * carCfg.carForwardOffset;
+		const worldFX = centerX + h.x * halfWb;
+		const worldFZ = centerZ + h.z * halfWb;
+		const worldRX = centerX - h.x * halfWb;
+		const worldRZ = centerZ - h.z * halfWb;
 
 		const axle = axleDataRef.current;
 		if (axle) {
