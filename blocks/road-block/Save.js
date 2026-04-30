@@ -15,6 +15,7 @@ export default function save({ attributes }) {
                 <p className="road-block-car-scale">{attributes.carScale}</p>
                 <p className="road-block-car-wheelbase">{attributes.carWheelbase}</p>
                 <p className="road-block-car-collidable">{attributes.carCollidable ? 1 : 0}</p>
+                <p className="road-block-car-enter-button-style">{attributes.carEnterButtonStyle || 'hud'}</p>
             </div>
         </div>
     );

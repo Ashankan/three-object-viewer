@@ -928,6 +928,41 @@ export default function EnvironmentFront(props) {
 	const [mobileRotControls, setMobileRotControls] = useState(null);
 	const movement = useKeyboardControls();
 
+	const [isInCar, setIsInCar] = useState(false);
+	const [showEnterButton, setShowEnterButton] = useState(false);
+	const [isMusicPaused, setIsMusicPaused] = useState(true);
+	const carTransformRef = useRef({ position: new THREE.Vector3(), quaternion: new THREE.Quaternion() });
+	const carSeatRef      = useRef({ position: new THREE.Vector3(), quaternion: new THREE.Quaternion() });
+
+	useEffect(() => {
+		const getAudio = () => document.querySelector('audio[data-mediabar], .media-bar audio');
+		const onPlay  = () => setIsMusicPaused(false);
+		const onPause = () => setIsMusicPaused(true);
+		const attach = () => {
+			const a = getAudio();
+			if (!a) return null;
+			setIsMusicPaused(a.paused);
+			a.addEventListener('play', onPlay);
+			a.addEventListener('pause', onPause);
+			return a;
+		};
+		const a = attach();
+		const timer = !a ? setTimeout(() => attach(), 2000) : null;
+		return () => {
+			clearTimeout(timer);
+			const a2 = getAudio();
+			if (a2) {
+				a2.removeEventListener('play', onPlay);
+				a2.removeEventListener('pause', onPause);
+			}
+		};
+	}, []);
+
+	const handleEnterProximity = () => setShowEnterButton(true);
+	const handleExitProximity  = () => setShowEnterButton(false);
+	const handleEnterCar = () => { setIsInCar(true); setShowEnterButton(false); };
+	const handleExitCar  = () => setIsInCar(false);
+
 	const [messages, setMessages] = useState();
 	const [messageHistory, setMessageHistory] = useState();
 	const [loaded, setLoaded] = useState(false);
@@ -1616,6 +1651,13 @@ export default function EnvironmentFront(props) {
 												carCfg={props.carCfg}
 												currentHeadingRef={currentHeadingRef}
 												curvatureScaleRef={curvatureScaleRef}
+												carTransformRef={carTransformRef}
+												carSeatRef={carSeatRef}
+												onEnterProximity={handleEnterProximity}
+												onExitProximity={handleExitProximity}
+												onEnterCar={handleEnterCar}
+												showEnterButton={showEnterButton}
+												enterButtonStyle={props.carCfg?.carEnterButtonStyle ?? 'hud'}
 											/>
 										</Suspense>
 									)}
@@ -1642,6 +1684,8 @@ export default function EnvironmentFront(props) {
 														defaultAvatar
 													}
 													movement={movement}
+													isInCar={isInCar}
+													carSeatRef={carSeatRef}
 												/>
 												<Participants
 													setParticipant={
@@ -3212,6 +3256,41 @@ export default function EnvironmentFront(props) {
 							/>
 						);
 					})}
+					{/* Enter Car — HUD prompt shown when avatar enters proximity zone */}
+					{showEnterButton && !isInCar &&
+					 (props.carCfg?.carEnterButtonStyle === 'hud' || props.carCfg?.carEnterButtonStyle === 'both' || !props.carCfg?.carEnterButtonStyle) && (
+						<button
+							style={{
+								position: 'absolute', bottom: '80px', left: '50%',
+								transform: 'translateX(-50%)',
+								pointerEvents: 'auto', zIndex: 200,
+								padding: '10px 24px', borderRadius: '8px',
+								background: 'rgba(0,0,0,0.75)', color: 'white',
+								border: '1px solid rgba(255,255,255,0.35)',
+								fontSize: '14px', cursor: 'pointer',
+							}}
+							onClick={handleEnterCar}
+						>
+							Enter Car
+						</button>
+					)}
+					{/* Leave Car — only shown while in car AND music is paused */}
+					{isInCar && isMusicPaused && (
+						<button
+							style={{
+								position: 'absolute', bottom: '80px', left: '50%',
+								transform: 'translateX(-50%)',
+								pointerEvents: 'auto', zIndex: 200,
+								padding: '10px 24px', borderRadius: '8px',
+								background: 'rgba(0,0,0,0.75)', color: 'white',
+								border: '1px solid rgba(255,255,255,0.35)',
+								fontSize: '14px', cursor: 'pointer',
+							}}
+							onClick={handleExitCar}
+						>
+							Leave Car
+						</button>
+					)}
 					<>
 						{isMobile() && (
 							<ReactNipple

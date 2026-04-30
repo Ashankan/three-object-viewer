@@ -299,6 +299,53 @@ export default function Player(props) {
 		let blinkTimer = 0;  // Initialize the blinkTimer outside the useFrame loop.
 		let blinkInterval = 5 + Math.random() * 10;  // Blink roughly every 2 to 6 seconds
 
+		// Apply / remove seated bone pose and camera mode when isInCar changes
+		useEffect(() => {
+			if (!currentVrm) return;
+			const h = currentVrm.humanoid;
+			const setRot = (name, x, y, z) => {
+				const node = h.getRawBoneNode(name);
+				if (node) node.rotation.set(x, y, z);
+			};
+			if (props.isInCar) {
+				// Stop walk/run animations and freeze idle
+				if (animationsRef.current) {
+					animationsRef.current.walking?.stop();
+					animationsRef.current.running?.stop();
+					animationsRef.current.idle?.setEffectiveWeight(0);
+				}
+				// Generic seated pose — hip forward, upper legs horizontal, knees bent
+				setRot('leftUpperLeg',  -Math.PI / 2, 0,  0.1);
+				setRot('rightUpperLeg', -Math.PI / 2, 0, -0.1);
+				setRot('leftLowerLeg',   Math.PI / 2, 0,  0);
+				setRot('rightLowerLeg',  Math.PI / 2, 0,  0);
+				setRot('spine',          0.15,         0,  0);
+				// Orbit around car: enable zoom, widen distance and polar range
+				if (orbitRef.current) {
+					orbitRef.current.enableZoom     = true;
+					orbitRef.current.minDistance    = 2;
+					orbitRef.current.maxDistance    = 12;
+					orbitRef.current.minPolarAngle  = Math.PI / 6;
+					orbitRef.current.maxPolarAngle  = Math.PI / 1.8;
+				}
+			} else {
+				// Reset bones to default and restart idle
+				['leftUpperLeg','rightUpperLeg','leftLowerLeg','rightLowerLeg','spine'].forEach(n => setRot(n, 0, 0, 0));
+				if (animationsRef.current) {
+					animationsRef.current.idle?.setEffectiveWeight(1);
+					animationsRef.current.idle?.play();
+				}
+				// Restore player-follow camera
+				if (orbitRef.current) {
+					orbitRef.current.enableZoom     = false;
+					orbitRef.current.minDistance    = 1.3;
+					orbitRef.current.maxDistance    = 2;
+					orbitRef.current.minPolarAngle  = Math.PI / 1.8;
+					orbitRef.current.maxPolarAngle  = Math.PI / 1.2;
+				}
+			}
+		}, [props.isInCar]);
+
 		// frame loop
 		useFrame((state, delta) => {
 			let isMoving = false;
@@ -316,7 +363,7 @@ export default function Player(props) {
 			right.crossVectors(camera.up, forward);
 			right.normalize();
 			// initialize the moving state to false
-			const raycaster = state.raycaster;		
+			const raycaster = state.raycaster;
 			if (timeSinceLastUpdate >= 0.1) {
 				lastUpdateTime = currentTime;
 			}
@@ -327,6 +374,44 @@ export default function Player(props) {
 				currentMixer.update(delta);
 			}
 			blinkTimer += delta;  // Increment timer
+
+			// While seated in car: lock avatar to seat position and skip all movement logic
+			if (props.isInCar && props.carSeatRef?.current) {
+				const seat = props.carSeatRef.current;
+
+				// Offset rigid body downward so avatar hips land at seat height,
+				// not feet. VRM scene is +0.3 above rigid body; hips ~0.7 above that.
+				const hipOffset = 1.0;
+				const bodyY = seat.position.y - hipOffset;
+
+				// KinematicPositionBased vs the car's kinematic body = they overlap
+				// with no collision response, so the avatar passes through the car body.
+				if (rigidRef.current) {
+					rigidRef.current.setBodyType(rapier.RigidBodyType.KinematicPositionBased, 1);
+					rigidRef.current.setNextKinematicTranslation({ x: seat.position.x, y: bodyY, z: seat.position.z });
+				}
+				// Park the obstacle sensor underground so it can't trigger canMoveRef
+				if (castRef.current) {
+					castRef.current.setTranslation({ x: seat.position.x, y: -100, z: seat.position.z });
+				}
+
+				// Face the avatar in the car's forward direction (seat empty faces
+				// car-forward in Blender, but VRM forward is the opposite axis).
+				const seatedQuat = seat.quaternion.clone().multiply(
+					new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI)
+				);
+				playerController.scene.quaternion.copy(seatedQuat);
+
+				// Orbit camera around the seat
+				if (orbitRef.current) {
+					orbitRef.current.target.lerpVectors(
+						orbitRef.current.target,
+						seat.position,
+						0.1
+					);
+				}
+				return;
+			}
 		
 			//blink
 			if (blinkTimer > blinkInterval) {

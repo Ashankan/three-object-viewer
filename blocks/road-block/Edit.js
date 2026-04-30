@@ -1,6 +1,6 @@
 import { __ } from "@wordpress/i18n";
 import { useBlockProps, InspectorControls, MediaUpload } from "@wordpress/block-editor";
-import { Panel, PanelBody, PanelRow, RangeControl, TextControl, Button, ToggleControl } from "@wordpress/components";
+import { Panel, PanelBody, PanelRow, RangeControl, TextControl, Button, ToggleControl, SelectControl } from "@wordpress/components";
 import "./editor.scss";
 
 export default function Edit({ attributes, setAttributes }) {
@@ -111,6 +111,19 @@ export default function Edit({ attributes, setAttributes }) {
                                     : __("Car is not collidable.", "three-object-viewer")}
                                 checked={attributes.carCollidable}
                                 onChange={(v) => setAttributes({ carCollidable: v })}
+                            />
+                        </PanelRow>
+                        <PanelRow>
+                            <SelectControl
+                                label={__("Enter Car Button Style", "three-object-viewer")}
+                                help={__("How the 'Enter Car' prompt is displayed when avatar is nearby.", "three-object-viewer")}
+                                value={attributes.carEnterButtonStyle}
+                                options={[
+                                    { label: __("Screen HUD", "three-object-viewer"),            value: "hud" },
+                                    { label: __("3D Billboard (above car)", "three-object-viewer"), value: "billboard" },
+                                    { label: __("Both", "three-object-viewer"),                  value: "both" },
+                                ]}
+                                onChange={(v) => setAttributes({ carEnterButtonStyle: v })}
                             />
                         </PanelRow>
                     </PanelBody>

@@ -2,11 +2,34 @@ import { useRef, useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { useLoader, useFrame } from "@react-three/fiber";
 import { useAnimations } from "@react-three/drei";
+import { Html } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader";
 import { RigidBody, CuboidCollider, interactionGroups } from "@react-three/rapier";
 
-export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
+const hudButtonStyle = {
+	padding: '8px 20px',
+	borderRadius: '6px',
+	background: 'rgba(0,0,0,0.75)',
+	color: 'white',
+	border: '1px solid rgba(255,255,255,0.35)',
+	fontSize: '13px',
+	cursor: 'pointer',
+	whiteSpace: 'nowrap',
+};
+
+export function CarObject({
+	carCfg,
+	currentHeadingRef,
+	curvatureScaleRef,
+	onEnterProximity,
+	onExitProximity,
+	onEnterCar,
+	showEnterButton,
+	enterButtonStyle,
+	carTransformRef,
+	carSeatRef,
+}) {
 	const groupRef    = useRef();
 	const rbRef       = useRef();
 	// Smoothed heading — IS the car body angle; the per-frame alpha provides the
@@ -16,6 +39,8 @@ export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 	// fPos / rPos: local positions of CarFrontAxle and CarRearAxle within gltf.scene
 	// localAngle: atan2 of the local rear→front direction (used to cancel model's own orientation)
 	const axleDataRef = useRef(null);
+	// Seat empty detected from the GLTF
+	const seatBaseRef = useRef(null);
 
 	const gltf = useLoader(GLTFLoader, carCfg.carModelUrl, (loader) => {
 		const dracoLoader = new DRACOLoader();
@@ -26,26 +51,27 @@ export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 
 	const { actions } = useAnimations(gltf.animations, gltf.scene);
 
+	// Always compute bbox — needed for both the proximity sensor and the solid collider.
 	const bbox = useMemo(() => {
-		if (!carCfg.carCollidable) return null;
 		const b = new THREE.Box3().setFromObject(gltf.scene);
 		return { size: b.getSize(new THREE.Vector3()), center: b.getCenter(new THREE.Vector3()) };
-	}, [gltf, carCfg.carCollidable]);
+	}, [gltf]);
 
 	useEffect(() => {
 		const frontEmpty = gltf.scene.getObjectByName("CarFrontAxle");
 		const rearEmpty  = gltf.scene.getObjectByName("CarRearAxle");
 		if (frontEmpty && rearEmpty) {
-			// Read local positions while gltf.scene has no parent transform yet
 			const fPos = new THREE.Vector3();
 			const rPos = new THREE.Vector3();
 			frontEmpty.getWorldPosition(fPos);
 			rearEmpty.getWorldPosition(rPos);
 			const wb = fPos.distanceTo(rPos);
-			// Direction rear→front in the model's own local XZ space
 			const localAngle = Math.atan2(fPos.x - rPos.x, fPos.z - rPos.z);
 			axleDataRef.current = { fPos, rPos, wb, localAngle };
 		}
+
+		// Detect the driver seat empty — world position is read each frame
+		seatBaseRef.current = gltf.scene.getObjectByName("CarSeatBase") ?? null;
 
 		const first = Object.values(actions)[0];
 		if (first) first.play();
@@ -75,12 +101,6 @@ export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 		const h  = sh;
 		const wb = axleDataRef.current?.wb ?? carCfg.carWheelbase;
 
-		// Derive front and rear axle positions directly from the smoothed body heading.
-		// In a fixed-world-origin system the front axle never translates, so a
-		// position-based trailer-drag equation locks the rear in its angled position
-		// forever once the constraint wb-distance is satisfied.  Deriving both axles
-		// from the same body angle means the car always straightens whenever the road
-		// does — the lag comes from smoothH's alpha filter, not from positional drag.
 		const halfWb  = wb / 2;
 		// Right = (h.z, -h.x); lateral/forward offsets shift the whole car.
 		const centerX = h.z * carCfg.carLateralOffset + h.x * carCfg.carForwardOffset;
@@ -92,18 +112,12 @@ export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 
 		const axle = axleDataRef.current;
 		if (axle) {
-			// World direction rear→front
 			const worldAngle = Math.atan2(worldFX - worldRX, worldFZ - worldRZ);
-			// Subtract the model's own local rear→front angle so CarFrontAxle and
-			// CarRearAxle land exactly on the computed world positions regardless of
-			// how the model was oriented in Blender or where its pivot sits.
 			const rotY  = worldAngle - axle.localAngle;
 			const cosR  = Math.cos(rotY);
 			const sinR  = Math.sin(rotY);
-			// Rotate the local front axle position by rotY to find where it ends up
 			const rotFX = cosR * axle.fPos.x - sinR * axle.fPos.z;
 			const rotFZ = sinR * axle.fPos.x + cosR * axle.fPos.z;
-			// Offset the group so the rotated CarFrontAxle lands on worldF
 			groupRef.current.rotation.y  = rotY;
 			groupRef.current.position.set(
 				worldFX - rotFX * carCfg.carScale,
@@ -111,7 +125,6 @@ export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 				worldFZ - rotFZ * carCfg.carScale
 			);
 		} else {
-			// Fallback (no empties): place group midpoint between axles, face rear→front
 			groupRef.current.position.set(
 				(worldFX + worldRX) / 2,
 				carCfg.carHeightOffset,
@@ -120,35 +133,81 @@ export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 			groupRef.current.rotation.y = Math.atan2(worldFX - worldRX, worldFZ - worldRZ);
 		}
 
-		if (carCfg.carCollidable && rbRef.current) {
-			const p = groupRef.current.position;
+		// Always sync the kinematic body so the proximity sensor follows the car
+		if (rbRef.current) {
+			const p  = groupRef.current.position;
 			const ry = groupRef.current.rotation.y;
 			rbRef.current.setNextKinematicTranslation({ x: p.x, y: p.y, z: p.z });
 			rbRef.current.setNextKinematicRotation(
 				new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ry)
 			);
 		}
+
+		// Export car world transform so Player can follow when seated
+		if (carTransformRef) {
+			const p  = groupRef.current.position;
+			const ry = groupRef.current.rotation.y;
+			carTransformRef.current.position.set(p.x, p.y, p.z);
+			carTransformRef.current.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), ry);
+		}
+
+		// Export seat world position/rotation if the CarSeatBase empty exists;
+		// fall back to bbox center + half height above car bottom.
+		if (carSeatRef) {
+			if (seatBaseRef.current) {
+				seatBaseRef.current.getWorldPosition(carSeatRef.current.position);
+				seatBaseRef.current.getWorldQuaternion(carSeatRef.current.quaternion);
+			} else if (carTransformRef) {
+				const p  = carTransformRef.current.position;
+				const cy = bbox.center.y * carCfg.carScale;
+				carSeatRef.current.position.set(p.x, p.y + cy + 0.5, p.z);
+				carSeatRef.current.quaternion.copy(carTransformRef.current.quaternion);
+			}
+		}
 	});
+
+	const showBillboard = showEnterButton && (enterButtonStyle === 'billboard' || enterButtonStyle === 'both');
 
 	return (
 		<>
-			<group ref={groupRef} scale={carCfg.carScale}>
-				<primitive object={gltf.scene} />
+			<group ref={groupRef}>
+				<group scale={carCfg.carScale}>
+					<primitive object={gltf.scene} />
+				</group>
+				{showBillboard && (
+					<Html
+						position={[0, bbox.size.y * carCfg.carScale + 0.4, 0]}
+						center
+						distanceFactor={8}
+					>
+						<button style={hudButtonStyle} onClick={onEnterCar}>Enter Car</button>
+					</Html>
+				)}
 			</group>
-			{carCfg.carCollidable && bbox && (
-				<RigidBody
-					ref={rbRef}
-					type="kinematicPosition"
-					colliders={false}
-					collisionGroups={interactionGroups(0, [0, 1])}
-					scale={[carCfg.carScale, carCfg.carScale, carCfg.carScale]}
-				>
+			<RigidBody
+				ref={rbRef}
+				type="kinematicPosition"
+				colliders={false}
+				scale={[carCfg.carScale, carCfg.carScale, carCfg.carScale]}
+			>
+				{/* Proximity sensor — always present, slightly larger than the car */}
+				<CuboidCollider
+					sensor
+					args={[bbox.size.x * 0.7, bbox.size.y * 0.6, bbox.size.z * 0.7]}
+					position={[bbox.center.x, bbox.center.y, bbox.center.z]}
+					collisionGroups={interactionGroups(0, [0])}
+					onIntersectionEnter={onEnterProximity}
+					onIntersectionExit={onExitProximity}
+				/>
+				{/* Solid collider — only when collidable is enabled */}
+				{carCfg.carCollidable && (
 					<CuboidCollider
 						args={[bbox.size.x / 2, bbox.size.y / 2, bbox.size.z / 2]}
 						position={[bbox.center.x, bbox.center.y, bbox.center.z]}
+						collisionGroups={interactionGroups(0, [0, 1])}
 					/>
-				</RigidBody>
-			)}
+				)}
+			</RigidBody>
 		</>
 	);
 }
