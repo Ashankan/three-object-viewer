@@ -14,9 +14,10 @@
 
     var PanelBody     = wp.components.PanelBody;
     var PanelRow      = wp.components.PanelRow;
-    var RangeControl  = wp.components.RangeControl;
-    var Button        = wp.components.Button;
-    var TextControl   = wp.components.TextControl;
+    var RangeControl   = wp.components.RangeControl;
+    var Button         = wp.components.Button;
+    var TextControl    = wp.components.TextControl;
+    var ToggleControl  = wp.components.ToggleControl;
 
     // ── Icon ─────────────────────────────────────────────────────────────────
     var icon = el('svg', { viewBox: '0 0 40 40', xmlns: 'http://www.w3.org/2000/svg', width: 20, height: 20 },
@@ -294,6 +295,14 @@
                             value: attributes.carWheelbase,
                             min: 0.5, max: 8, step: 0.1,
                             onChange: function (v) { setAttributes({ carWheelbase: v }); }
+                        })
+                    ),
+                    el(PanelRow, {},
+                        el(ToggleControl, {
+                            label: 'Collidable',
+                            help: attributes.carCollidable ? 'Car has a collision body.' : 'Car is not collidable.',
+                            checked: !!attributes.carCollidable,
+                            onChange: function (v) { setAttributes({ carCollidable: v }); }
                         })
                     )
                 ),

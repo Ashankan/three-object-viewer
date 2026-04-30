@@ -12,8 +12,9 @@
         "carHeightOffset":  { "type": "number", "default": 0.0 },
         "carLateralOffset": { "type": "number", "default": 0.0 },
         "carForwardOffset": { "type": "number", "default": 0.0 },
-        "carScale":         { "type": "number", "default": 1.0 },
-        "carWheelbase":     { "type": "number", "default": 2.5 }
+        "carScale":         { "type": "number",  "default": 1.0 },
+        "carWheelbase":     { "type": "number",  "default": 2.5 },
+        "carCollidable":    { "type": "boolean", "default": false }
     },
     "category": "design",
     "parent": ["three-object-viewer/environment"],

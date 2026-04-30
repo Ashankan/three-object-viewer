@@ -1,6 +1,6 @@
 import { __ } from "@wordpress/i18n";
 import { useBlockProps, InspectorControls, MediaUpload } from "@wordpress/block-editor";
-import { Panel, PanelBody, PanelRow, RangeControl, TextControl, Button } from "@wordpress/components";
+import { Panel, PanelBody, PanelRow, RangeControl, TextControl, Button, ToggleControl } from "@wordpress/components";
 import "./editor.scss";
 
 export default function Edit({ attributes, setAttributes }) {
@@ -102,6 +102,16 @@ export default function Edit({ attributes, setAttributes }) {
                                 help={__("Used if model has no CarFrontAxle/CarRearAxle empties.", "three-object-viewer")}
                                 value={attributes.carWheelbase} min={0.5} max={8} step={0.1}
                                 onChange={(v) => setAttributes({ carWheelbase: v })} />
+                        </PanelRow>
+                        <PanelRow>
+                            <ToggleControl
+                                label={__("Collidable", "three-object-viewer")}
+                                help={attributes.carCollidable
+                                    ? __("Car has a collision body.", "three-object-viewer")
+                                    : __("Car is not collidable.", "three-object-viewer")}
+                                checked={attributes.carCollidable}
+                                onChange={(v) => setAttributes({ carCollidable: v })}
+                            />
                         </PanelRow>
                     </PanelBody>
                 </Panel>

@@ -14,6 +14,7 @@ export default function save({ attributes }) {
                 <p className="road-block-car-forward-offset">{attributes.carForwardOffset}</p>
                 <p className="road-block-car-scale">{attributes.carScale}</p>
                 <p className="road-block-car-wheelbase">{attributes.carWheelbase}</p>
+                <p className="road-block-car-collidable">{attributes.carCollidable ? 1 : 0}</p>
             </div>
         </div>
     );

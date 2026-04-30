@@ -1,12 +1,14 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { useLoader, useFrame } from "@react-three/fiber";
 import { useAnimations } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader";
+import { RigidBody, CuboidCollider, interactionGroups } from "@react-three/rapier";
 
 export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 	const groupRef    = useRef();
+	const rbRef       = useRef();
 	// Smoothed heading — IS the car body angle; the per-frame alpha provides the
 	// wheelbase-lag effect. Rear axle is derived from this, not tracked separately.
 	const smoothH     = useRef({ x: 0, z: -1 });
@@ -23,6 +25,12 @@ export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 	});
 
 	const { actions } = useAnimations(gltf.animations, gltf.scene);
+
+	const bbox = useMemo(() => {
+		if (!carCfg.carCollidable) return null;
+		const b = new THREE.Box3().setFromObject(gltf.scene);
+		return { size: b.getSize(new THREE.Vector3()), center: b.getCenter(new THREE.Vector3()) };
+	}, [gltf, carCfg.carCollidable]);
 
 	useEffect(() => {
 		const frontEmpty = gltf.scene.getObjectByName("CarFrontAxle");
@@ -111,11 +119,36 @@ export function CarObject({ carCfg, currentHeadingRef, curvatureScaleRef }) {
 			);
 			groupRef.current.rotation.y = Math.atan2(worldFX - worldRX, worldFZ - worldRZ);
 		}
+
+		if (carCfg.carCollidable && rbRef.current) {
+			const p = groupRef.current.position;
+			const ry = groupRef.current.rotation.y;
+			rbRef.current.setNextKinematicTranslation({ x: p.x, y: p.y, z: p.z });
+			rbRef.current.setNextKinematicRotation(
+				new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ry)
+			);
+		}
 	});
 
 	return (
-		<group ref={groupRef} scale={carCfg.carScale}>
-			<primitive object={gltf.scene} />
-		</group>
+		<>
+			<group ref={groupRef} scale={carCfg.carScale}>
+				<primitive object={gltf.scene} />
+			</group>
+			{carCfg.carCollidable && bbox && (
+				<RigidBody
+					ref={rbRef}
+					type="kinematicPosition"
+					colliders={false}
+					collisionGroups={interactionGroups(0, [0, 1])}
+					scale={[carCfg.carScale, carCfg.carScale, carCfg.carScale]}
+				>
+					<CuboidCollider
+						args={[bbox.size.x / 2, bbox.size.y / 2, bbox.size.z / 2]}
+						position={[bbox.center.x, bbox.center.y, bbox.center.z]}
+					/>
+				</RigidBody>
+			)}
+		</>
 	);
 }

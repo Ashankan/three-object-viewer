@@ -28,6 +28,7 @@ const carCfg = roadDomEl ? {
 	carForwardOffset: parseFloat(roadDomEl.querySelector(".road-block-car-forward-offset")?.textContent) || 0,
 	carScale:         parseFloat(roadDomEl.querySelector(".road-block-car-scale")?.textContent) || 1.0,
 	carWheelbase:     parseFloat(roadDomEl.querySelector(".road-block-car-wheelbase")?.textContent) || 2.5,
+	carCollidable:    roadDomEl.querySelector(".road-block-car-collidable")?.textContent?.trim() === '1',
 } : null;
 const npcsToAdd = document.querySelectorAll(
 	".three-object-three-app-npc-block"

@@ -1607,18 +1607,18 @@ export default function EnvironmentFront(props) {
 								/>
 								</Suspense>
 								)}
-								{props.roadToAdd && props.carCfg?.carModelUrl && (
-									<Suspense fallback={null}>
-										<CarObject
-											carCfg={props.carCfg}
-											currentHeadingRef={currentHeadingRef}
-											curvatureScaleRef={curvatureScaleRef}
-										/>
-									</Suspense>
-								)}
 								<Physics
 								// debug
 								>
+									{props.roadToAdd && props.carCfg?.carModelUrl && (
+										<Suspense fallback={null}>
+											<CarObject
+												carCfg={props.carCfg}
+												currentHeadingRef={currentHeadingRef}
+												curvatureScaleRef={curvatureScaleRef}
+											/>
+										</Suspense>
+									)}
 									{/* <Perf className="stats" /> */}
 									{/* Debug physics */}
 									{url && (
