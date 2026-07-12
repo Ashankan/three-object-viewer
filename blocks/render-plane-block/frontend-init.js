@@ -619,14 +619,27 @@
             outgoingSlot = currentSlot; // kept alive in texA through the fade
             currentSlot  = slot;
             isFading = true; fadeProgress = 0;
-            mat.uniforms.texB.value = slot.tex;
-            mat.uniformsNeedUpdate  = true;
             if (slot.vid) {
                 activeVideo = slot.vid;
                 slot.vid.currentTime = 0;
                 slot.vid.play().catch(function(){});
                 slot.vid.addEventListener('ended', advance, { once: true });
+                // Don't bind the texture until the seek has produced a decoded
+                // frame — uploading earlier throws "texImage2D: no video".
+                // (Same guard as the boot path below.)
+                var bindTexB = function() {
+                    if (currentSlot !== slot) return; // superseded by a later slot
+                    if (slot.vid.readyState >= 2) {
+                        mat.uniforms.texB.value = slot.tex;
+                        mat.uniformsNeedUpdate  = true;
+                    } else {
+                        requestAnimationFrame(bindTexB);
+                    }
+                };
+                bindTexB();
             } else {
+                mat.uniforms.texB.value = slot.tex;
+                mat.uniformsNeedUpdate  = true;
                 activeVideo = null; elapsed = 0;
             }
         }
@@ -651,14 +664,6 @@
         // ── per-frame update ───────────────────────────────────────────────
         scene.userData.playlistUpdate = function(delta) {
             if (!mat.uniforms) return;
-
-            // frustum light tick
-            if (scene.userData.frustumMat) {
-                scene.userData.frustumTimeRef.t += delta * 0.5;
-                scene.userData.frustumMat.uniforms.frustumTime.value = scene.userData.frustumTimeRef.t;
-                scene.userData.frustumMat.uniforms.texA.value        = mat.uniforms.texA.value;
-                scene.userData.frustumMat.uniformsNeedUpdate         = true;
-            }
 
             if (slEnabled && slDrift !== 0.0) {
                 slTime += delta * slDrift;
@@ -688,6 +693,15 @@
             } else if (!activeVideo) {
                 elapsed += delta;
                 if (elapsed >= imageDur) advance();
+            }
+
+            // frustum light tick — after the fade block, so it never mirrors
+            // a texture that was just disposed above
+            if (scene.userData.frustumMat) {
+                scene.userData.frustumTimeRef.t += delta * 0.5;
+                scene.userData.frustumMat.uniforms.frustumTime.value = scene.userData.frustumTimeRef.t;
+                scene.userData.frustumMat.uniforms.texA.value        = mat.uniforms.texA.value;
+                scene.userData.frustumMat.uniformsNeedUpdate         = true;
             }
         };
 
