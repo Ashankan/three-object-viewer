@@ -38,8 +38,15 @@
     }
     window.__rpbDomHandler__ = function () { initBlocks(); };
 
-    // Initial page load
-    document.addEventListener('DOMContentLoaded', function () { initBlocks(); });
+    // Initial page load — this script runs in the footer, so DOMContentLoaded
+    // has usually already fired by the time we get here. Run immediately if
+    // the DOM is already parsed; only wait for the event if we're somehow
+    // still early. (Same guard as blocks/environment/components/Networking.js)
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        initBlocks();
+    } else {
+        document.addEventListener('DOMContentLoaded', function () { initBlocks(); });
+    }
 
     // Re-init after MediaBar AJAX navigation
     document.addEventListener('afs:dom-updated', window.__rpbDomHandler__);
