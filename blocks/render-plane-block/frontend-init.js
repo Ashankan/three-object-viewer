@@ -108,6 +108,10 @@
         var lightDirZ          = parseFloat(txt(container, 'rpb-light-dir-z'));
         if (!lightDirY && lightDirY !== 0) lightDirY = 1;
         if (!lightDirZ && lightDirZ !== 0) lightDirZ = 1;
+        var touchMarginTop    = parseFloat(txt(container, 'rpb-touch-margin-top'))    || 60;
+        var touchMarginRight  = parseFloat(txt(container, 'rpb-touch-margin-right'))  || 60;
+        var touchMarginBottom = parseFloat(txt(container, 'rpb-touch-margin-bottom')) || 60;
+        var touchMarginLeft   = parseFloat(txt(container, 'rpb-touch-margin-left'))   || 60;
 
         var playlistEl = container.querySelector('p.rpb-playlist');
         var playlist   = [];
@@ -176,7 +180,11 @@
             reflectionShininess:   reflectionShininess,
             lightDirX:             lightDirX,
             lightDirY:             lightDirY,
-            lightDirZ:             lightDirZ
+            lightDirZ:             lightDirZ,
+            touchMarginTop:        touchMarginTop,
+            touchMarginRight:      touchMarginRight,
+            touchMarginBottom:     touchMarginBottom,
+            touchMarginLeft:       touchMarginLeft
         });
     }
 
@@ -213,9 +221,8 @@
         scene.add(dir);
 
         // ── OrbitControls with inset touch zone
-        var pad = 60; // px inset on left and right
         var touchZone = document.createElement('div');
-        touchZone.style.cssText = 'position:absolute;top:' + pad + 'px;bottom:' + pad + 'px;left:' + pad + 'px;right:' + pad + 'px;pointer-events:auto;';
+        touchZone.style.cssText = 'position:absolute;top:' + cfg.touchMarginTop + 'px;bottom:' + cfg.touchMarginBottom + 'px;left:' + cfg.touchMarginLeft + 'px;right:' + cfg.touchMarginRight + 'px;pointer-events:auto;';
         wrapper.style.position = 'relative';
         wrapper.appendChild(touchZone);
 

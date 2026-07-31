@@ -20,6 +20,9 @@
     var ColorPalette  = wp.blockEditor.ColorPalette;
     var Button        = wp.components.Button;
     var Notice        = wp.components.Notice;
+    var BoxControl    = wp.components.BoxControl || wp.components.__experimentalBoxControl;
+
+    var DEFAULT_TOUCH_MARGIN = { top: '60px', right: '60px', bottom: '60px', left: '60px' };
 
     var icon = el('svg', {
         viewBox: '0 0 40 40',
@@ -190,6 +193,17 @@
                             label: 'Click & Drag Tip',
                             checked: attributes.hasTip,
                             onChange: function (v) { setAttributes({ hasTip: v }); }
+                        })
+                    ),
+                    el(PanelRow, {},
+                        el(BoxControl, {
+                            label: 'Touch Input Margin',
+                            help: 'Inset from each edge where touch/drag controls the 3D view. Increase a side to hand that area back to page scrolling; set large enough to disable touch interaction entirely.',
+                            values: attributes.touchMargin || DEFAULT_TOUCH_MARGIN,
+                            units: [{ value: 'px', label: 'px', default: 60 }],
+                            allowReset: true,
+                            resetValues: DEFAULT_TOUCH_MARGIN,
+                            onChange: function (v) { setAttributes({ touchMargin: v }); }
                         })
                     ),
                     el(PanelRow, {},
@@ -616,6 +630,10 @@
                 el('p', { className: 'rpb-light-dir-x' },         String(a.lightDirX || 0)),
                 el('p', { className: 'rpb-light-dir-y' },         String(a.lightDirY !== undefined ? a.lightDirY : 1)),
                 el('p', { className: 'rpb-light-dir-z' },         String(a.lightDirZ !== undefined ? a.lightDirZ : 1)),
+                el('p', { className: 'rpb-touch-margin-top' },    String(parseFloat(a.touchMargin && a.touchMargin.top)    || 60)),
+                el('p', { className: 'rpb-touch-margin-right' },  String(parseFloat(a.touchMargin && a.touchMargin.right)  || 60)),
+                el('p', { className: 'rpb-touch-margin-bottom' }, String(parseFloat(a.touchMargin && a.touchMargin.bottom) || 60)),
+                el('p', { className: 'rpb-touch-margin-left' },   String(parseFloat(a.touchMargin && a.touchMargin.left)   || 60)),
                 el('p', {
                     className: 'rpb-playlist',
                     'data-rpb-playlist': JSON.stringify(a.playlistItems || [])
@@ -674,7 +692,8 @@
             reflectionShininess: { type: 'number',  default: 32 },
             lightDirX:           { type: 'number',  default: 0 },
             lightDirY:           { type: 'number',  default: 1 },
-            lightDirZ:           { type: 'number',  default: 1 }
+            lightDirZ:           { type: 'number',  default: 1 },
+            touchMargin:         { type: 'object',  default: { top: '60px', right: '60px', bottom: '60px', left: '60px' } }
         },
         supports: { html: false, multiple: true },
         edit: Edit,

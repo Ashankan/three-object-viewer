@@ -46,7 +46,8 @@
         "reflectionShininess": { "type": "number",  "default": 32 },
         "lightDirX":           { "type": "number",  "default": 0 },
         "lightDirY":           { "type": "number",  "default": 1 },
-        "lightDirZ":           { "type": "number",  "default": 1 }
+        "lightDirZ":           { "type": "number",  "default": 1 },
+        "touchMargin":         { "type": "object",  "default": { "top": "60px", "right": "60px", "bottom": "60px", "left": "60px" } }
     },
     "category": "media",
     "apiVersion": 2,
