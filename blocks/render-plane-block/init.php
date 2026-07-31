@@ -10,12 +10,32 @@ add_action('init', function () {
 /**
  * Enqueue the frontend playlist runtime on pages that contain this block.
  * glb-loader.js must load before frontend-init.js.
+ *
+ * This used to gate on has_block('three-object-viewer/render-plane-block',
+ * $post->ID), which only looks at the current post's post_content. On block
+ * themes / FSE templates the block can render from a template part or query
+ * loop instead, so has_block() silently returns false forever -- that's not
+ * a caching problem, so clearing caches never fixes it.
+ *
+ * render_block_{name} fires for the block no matter where it actually
+ * renders from (post content, template part, query loop). We flag its
+ * presence there, then do the real enqueue in wp_footer (priority 1, before
+ * core's wp_print_footer_scripts at priority 20) so these scripts only load
+ * on pages that actually used the block.
  */
-add_action('wp_enqueue_scripts', function () {
-    global $post;
-    if (!$post) return;
+(function () {
+    $present = false;
 
-    if (has_block('three-object-viewer/render-plane-block', $post->ID)) {
+    add_filter('render_block_three-object-viewer/render-plane-block', function ($block_content) use (&$present) {
+        $present = true;
+        return $block_content;
+    });
+
+    add_action('wp_footer', function () use (&$present) {
+        if (!$present) {
+            return;
+        }
+
         $block_dir = plugin_dir_path(__FILE__);
         $block_url = plugins_url('', __FILE__);
 
@@ -46,11 +66,13 @@ add_action('wp_enqueue_scripts', function () {
             true
         );
 
-        wp_enqueue_style(
-            'rpb-style',
-            $block_url . '/style.css',
-            [],
-            filemtime($block_dir . 'style.css')
+        // wp_head's style queue (wp_print_styles, priority 8) has already
+        // printed by the time wp_footer runs, so wp_enqueue_style() here
+        // would silently never make it into the page. Print the tag
+        // directly instead.
+        printf(
+            '<link rel="stylesheet" id="rpb-style-css" href="%s" media="all" />' . "\n",
+            esc_url($block_url . '/style.css?ver=' . filemtime($block_dir . 'style.css'))
         );
-    }
-});
+    }, 1);
+})();

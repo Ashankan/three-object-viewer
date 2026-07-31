@@ -4,12 +4,30 @@ namespace threeObjectViewer\Core;
 
 class Plugin
 {
+	// Set by render_block_{name} filters below, read by
+	// threeobjectviewer_frontend_assets() -- see the comment on init()
+	// for why this replaced has_block().
+	private $has_three_object_block = false;
+	private $has_environment_block = false;
+
 	public function init() {
         // Add actions and filters
 		add_filter( 'run_wptexturize', '__return_false' );
 		add_filter('upload_mimes', array( $this, 'threeobjectviewer_add_file_types_to_uploads'), 10, 4);
 		add_filter( 'wp_check_filetype_and_ext',  array( $this, 'three_object_viewer_check_for_usdz'), 10, 4 );
-		add_action('wp_enqueue_scripts',  array( $this, 'threeobjectviewer_frontend_assets'));
+		// threeobjectviewer_frontend_assets() used to gate its enqueues on
+		// has_block($name, get_the_ID()), which only looks at the current
+		// post's post_content. On block themes / FSE templates these blocks
+		// can render from a template part or query loop instead, so
+		// has_block() silently returns false forever there -- that isn't a
+		// caching problem, so clearing caches never fixes it.
+		// render_block_{name} fires for the block wherever it actually
+		// renders, so we flag its presence there and do the real enqueue in
+		// wp_footer once the whole page (including template parts) has been
+		// rendered.
+		add_filter( 'render_block_three-object-viewer/three-object-block', array( $this, 'threeobjectviewer_mark_three_object_block_present' ) );
+		add_filter( 'render_block_three-object-viewer/environment', array( $this, 'threeobjectviewer_mark_environment_block_present' ) );
+		add_action( 'wp_footer',  array( $this, 'threeobjectviewer_frontend_assets' ), 1 );
 		add_action( 'rest_api_init',  array( $this, 'callAlchemy' ));
 		add_action('enqueue_block_editor_assets',  array( $this, 'threeobjectviewer_editor_assets'));
  		//Register JavaScript and CSS for threeobjectloaderinit
@@ -21,6 +39,16 @@ class Plugin
 		add_action( 'init', array( $this, 'load_three_object_viewer_textdomain' ) );
 
     }
+
+	function threeobjectviewer_mark_three_object_block_present( $block_content ) {
+		$this->has_three_object_block = true;
+		return $block_content;
+	}
+
+	function threeobjectviewer_mark_environment_block_present( $block_content ) {
+		$this->has_environment_block = true;
+		return $block_content;
+	}
 
 	function load_three_object_viewer_textdomain() {
 		load_plugin_textdomain( 'three-object-viewer', false, dirname(dirname(plugin_basename(__FILE__))) . '/languages' );
@@ -188,17 +216,18 @@ class Plugin
 		//     'vrm' => 'somefile.vrm',
 		//  );
 		global $post;
-		$post_slug = $post->post_name;
+		$post_slug = $post ? $post->post_name : '';
 		$openbrush_enabled = false;
 		$three_icosa_brushes_url = '';
-		if(is_singular() || is_home() || is_front_page() || is_archive() || is_search()) {
+		{
 			if (!function_exists('is_plugin_active')) {
 				include_once(ABSPATH . 'wp-admin/includes/plugin.php');
 			}
-	
-			//We only want the script if it's a singular page
-			$id = get_the_ID();
-			if(has_block('three-object-viewer/three-object-block',$id)){			
+
+			// Set by render_block_{name} filters registered in init() --
+			// true if the block rendered anywhere on this page, including
+			// inside a template part or query loop.
+			if($this->has_three_object_block){
 				if ( is_plugin_active( 'three-object-viewer-three-icosa/three-object-viewer-three-icosa.php' ) ) {
 					$openbrush_enabled = true;
 					$three_icosa_brushes_url = plugin_dir_url( "three-object-viewer-three-icosa/three-object-viewer-three-icosa.php" ) . 'brushes/';
@@ -216,7 +245,7 @@ class Plugin
 					"threeobjectloader-frontend"
 				);
 			}
-			if(has_block('three-object-viewer/environment',$id)){
+			if($this->has_environment_block){
 				if ( is_plugin_active( 'three-object-viewer-three-icosa/three-object-viewer-three-icosa.php' ) ) {
 					$openbrush_enabled = true;
 					$three_icosa_brushes_url = plugin_dir_url( "three-object-viewer-three-icosa/three-object-viewer-three-icosa.php" ) . 'brushes/';
